@@ -1,20 +1,22 @@
+const db = require('../config/db');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const UserModel = require('../models/userModel');
-const { registerSchema, loginSchema } = require('../utils/validation');
+const generateToken = require('../utils/generateToken');
+const Joi = require('joi'); // Ensure Joi is required
 
-// Helper: Generate JWT Token
-const generateToken = (user) => {
-  return jwt.sign(
-    { id: user.id, role: user.role },
-    process.env.JWT_SECRET,
-    { expiresIn: '30d' } // Token expires in 30 days
-  );
-};
+// Validation Schemas
+const registerSchema = Joi.object({
+  name: Joi.string().min(2).required(), // FIX: Added 'name' here
+  email: Joi.string().email().required(),
+  password: Joi.string().min(6).required()
+});
+
+const loginSchema = Joi.object({
+  email: Joi.string().email().required(),
+  password: Joi.string().required()
+});
 
 // @desc    Register a new user
 // @route   POST /api/auth/register
-// @access  Public
 exports.register = async (req, res) => {
   try {
     // 1. Validate Input
@@ -23,43 +25,42 @@ exports.register = async (req, res) => {
       return res.status(400).json({ error: error.details[0].message });
     }
 
-    const { email, password } = req.body;
+    const { name, email, password } = req.body;
 
-    // 2. Check if user already exists
-    const existingUser = await UserModel.findByEmail(email);
-    if (existingUser) {
-      return res.status(400).json({ error: 'Email already in use' });
+    // 2. Check if user exists
+    const userExists = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (userExists.rows.length > 0) {
+      return res.status(400).json({ error: 'User already exists' });
     }
 
-    // 3. Hash Password
+    // 3. Hash password
     const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
+    const hashedPassword = await bcrypt.hash(password, salt);
 
-    // 4. Create User
-    const newUser = await UserModel.create(email, passwordHash);
+    // 4. Insert User
+    // Ensure your database has a 'name' column. If not, see the SQL fix below.
+    const newUser = await db.query(
+      'INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id, name, email',
+      [name, email, hashedPassword]
+    );
 
-    // 5. Generate Token immediately (auto-login)
-    const token = generateToken(newUser);
-
+    // 5. Respond with Token
+    const user = newUser.rows[0];
     res.status(201).json({
-      message: 'User registered successfully',
-      token,
-      user: {
-        id: newUser.id,
-        email: newUser.email,
-        role: newUser.role
-      }
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      token: generateToken(user.id),
     });
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Server error during registration' });
+    res.status(500).json({ error: 'Server error' });
   }
 };
 
-// @desc    Login user
+// @desc    Login user & get token
 // @route   POST /api/auth/login
-// @access  Public
 exports.login = async (req, res) => {
   try {
     // 1. Validate Input
@@ -70,33 +71,31 @@ exports.login = async (req, res) => {
 
     const { email, password } = req.body;
 
-    // 2. Find User
-    const user = await UserModel.findByEmail(email);
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+    // 2. Check for user
+    const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    // 3. Check Password
-    const isMatch = await bcrypt.compare(password, user.password_hash);
+    const user = result.rows[0];
+
+    // 3. Check password
+    const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    // 4. Generate Token
-    const token = generateToken(user);
-
+    // 4. Respond with Token
     res.json({
-      message: 'Login successful',
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role
-      }
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      token: generateToken(user.id),
     });
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Server error during login' });
+    res.status(500).json({ error: 'Server error' });
   }
 };

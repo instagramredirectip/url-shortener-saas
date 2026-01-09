@@ -1,10 +1,7 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api'; 
-import { Copy, Check, Loader2 } from 'lucide-react';
-
-// FIX: Removed the local image import that was causing the crash
-// import footerImg from '../assets/footer.png'; 
+import { Copy, Check, Loader2, LayoutDashboard } from 'lucide-react';
 
 const Home = () => {
   const [inputUrl, setInputUrl] = useState('');
@@ -12,6 +9,16 @@ const Home = () => {
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState(null);
+  
+  // NEW: Check login status
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check if token exists in storage
+    const token = localStorage.getItem('token');
+    setIsLoggedIn(!!token);
+  }, []);
 
   const handleShorten = async (e) => {
     e.preventDefault();
@@ -45,9 +52,23 @@ const Home = () => {
       {/* Navigation */}
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between w-full">
         <div className="text-2xl font-bold text-primary">Panda<span className="text-gray-900">Lime</span></div>
-        <div className="space-x-4">
-          <Link to="/login" className="text-gray-600 hover:text-gray-900 font-medium">Log in</Link>
-          <Link to="/register" className="bg-primary hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-medium transition-colors">Sign up</Link>
+        
+        {/* DYNAMIC NAV BUTTONS */}
+        <div className="flex items-center space-x-4">
+          {isLoggedIn ? (
+            <Link 
+              to="/dashboard" 
+              className="bg-gray-900 hover:bg-gray-800 text-white px-5 py-2.5 rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              <LayoutDashboard size={18} />
+              Dashboard
+            </Link>
+          ) : (
+            <>
+              <Link to="/login" className="text-gray-600 hover:text-gray-900 font-medium">Log in</Link>
+              <Link to="/register" className="bg-primary hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-medium transition-colors">Sign up</Link>
+            </>
+          )}
         </div>
       </nav>
 
@@ -98,33 +119,15 @@ const Home = () => {
           </div>
         )}
 
-        <div className="text-sm text-gray-400">
-          Want custom names (e.g., /bubble) and analytics? <Link to="/register" className="text-primary hover:underline font-semibold">Create a free account</Link>.
-        </div>
+        {/* Conditional Footer Text */}
+        {!isLoggedIn && (
+          <div className="text-sm text-gray-400">
+            Want custom names (e.g., /bubble) and analytics? <Link to="/register" className="text-primary hover:underline font-semibold">Create a free account</Link>.
+          </div>
+        )}
       </div>
 
-      {/* Features Grid */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 bg-gray-50 rounded-3xl mb-12">
-        <div className="grid md:grid-cols-3 gap-12">
-          <div className="text-center">
-            <div className="bg-white w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm text-2xl">⚡</div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">Lightning Fast</h3>
-            <p className="text-gray-500">Redirects happen in milliseconds. No lag.</p>
-          </div>
-          <div className="text-center">
-            <div className="bg-white w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm text-2xl">📊</div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">Analytics</h3>
-            <p className="text-gray-500">Track clicks and location data easily.</p>
-          </div>
-          <div className="text-center">
-            <div className="bg-white w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm text-2xl">💰</div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">Monetization</h3>
-            <p className="text-gray-500">Earn revenue with our smart ad integration.</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Footer Image - USING PLACEHOLDER TO FIX BUILD */}
+      {/* Footer Image Placeholder (Using URL for stability) */}
       <footer className="w-full mt-auto">
         <img 
           src="https://i.pinimg.com/736x/07/a3/12/07a3127d57215a6ca2a5465cdd5d06ac.jpg" 
