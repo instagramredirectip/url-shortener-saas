@@ -1,18 +1,12 @@
 const { Pool } = require('pg');
-
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
 const pool = new Pool({
-  user: process.env.DB_USER,
-  host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
-  password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT,
-});
-
-// Event listener for errors (prevents backend crash on idle client error)
-pool.on('error', (err) => {
-  console.error('[Database] Unexpected error on idle client', err);
-  process.exit(-1);
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false // Required for Neon/Cloud DB connections
+  }
 });
 
 module.exports = {
