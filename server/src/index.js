@@ -1,53 +1,41 @@
-const path = require('path');
-// Point explicitly to the .env file in the parent directory
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
-
-const redirectRoutes = require('./routes/redirectRoutes');
-
-const express = require('express'); // Only imported once now
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
+const express = require('express');
+const cors = require('cors'); // <--- Critical for custom domains
+require('dotenv').config();
 const db = require('./config/db');
-
-// Import Routes
 const authRoutes = require('./routes/authRoutes');
-const urlRoutes = require('./routes/urlRoutes'); // This was missing
+const urlRoutes = require('./routes/urlRoutes');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
 
-// Middleware
-app.use(helmet()); // Security Headers
-app.use(cors()); // CORS Handling
-app.use(morgan('combined')); // Production Logging
-app.use(express.json()); // JSON Parsing
+// --- SECURITY CONFIGURATION (CORS) ---
+// This tells the backend: "It is okay to accept requests from these websites"
+app.use(cors({
+  origin: [
+    'https://pandalime.com',       // Your live custom domain
+    'https://www.pandalime.com',   // Your live custom domain (www version)
+    'http://localhost:5173',       // Your local development (for testing)
+    // You can also add your Render frontend URL if you want to support both:
+    // 'https://url-shortener-client-xxxx.onrender.com' 
+  ],
+  credentials: true, // Allow cookies/headers if needed
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+}));
 
-// API Routes
+// Middleware to parse JSON bodies
+app.use(express.json());
+
+// --- ROUTES ---
 app.use('/api/auth', authRoutes);
 app.use('/api/urls', urlRoutes);
 
-// Health Check Route
+// Health Check Endpoint (To see if server is alive)
 app.get('/', (req, res) => {
-  res.json({
-    status: 'active',
-    system: 'URL Shortener API',
-    timestamp: new Date().toISOString()
-  });
+  res.send('Panda URL Shortener API is running...');
 });
 
+// --- START SERVER ---
+const PORT = process.env.PORT || 5000;
 
-app.use('/', redirectRoutes);
-// Start Server
-app.listen(PORT, async () => {
-  console.log(`[Server] Running on http://localhost:${PORT}`);
-  
-  // Test DB Connection
-  try {
-    const res = await db.query('SELECT NOW()');
-    console.log(`[Database] Connected successfully! Time: ${res.rows[0].now}`);
-  } catch (err) {
-    console.error('[Database] Connection failed:', err.message);
-    process.exit(1); // Kill server if DB fails
-  }
+app.listen(PORT, () => {
+  console.log(`[Server] Running on port ${PORT}`);
 });
