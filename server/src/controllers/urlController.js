@@ -1,5 +1,4 @@
 const db = require('../config/db');
-// Ensure this matches your actual file name in /utils/
 const { generateShortCode } = require('../utils/generateShortCode');
 
 // @desc    Create a short URL
@@ -46,10 +45,14 @@ exports.getMyUrls = async (req, res) => {
   }
 };
 
-// @desc    Show Ad Page then Redirect (Monetization Logic)
+// @desc    Show Ad Page then Redirect
 // @route   GET /:code
 exports.redirectUrl = async (req, res) => {
   try {
+    // --- ⚙️ CONFIGURATION --------------------------------------
+    const WAIT_TIME_SECONDS = 8; // CHANGED TO 8 SECONDS
+    // -----------------------------------------------------------
+
     const { code } = req.params;
     
     // 1. Find the URL
@@ -66,22 +69,17 @@ exports.redirectUrl = async (req, res) => {
     db.query('INSERT INTO clicks (url_id, ip_address) VALUES ($1, $2)', [url.id, ip]);
     db.query('UPDATE urls SET click_count = click_count + 1 WHERE id = $1', [url.id]);
 
-    // 3. Serve the HTML with Monetag Ad Script
+    // 3. Serve the HTML
     const html = `
       <!DOCTYPE html>
       <html lang="en">
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Panda Shortener - Please Wait</title>
+        <title>Please Wait...</title>
         <script src="https://cdn.tailwindcss.com"></script>
         
-        <script>
-            (function(s){
-                s.dataset.zone='10437929';
-                s.src='https://gizokraijaw.net/vignette.min.js';
-            })([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')));
-        </script>
+        <script src="https://quge5.com/88/tag.min.js" data-zone="200271" async data-cfasync="false"></script>
 
         <style>
             @keyframes pulse-slow { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
@@ -96,19 +94,19 @@ exports.redirectUrl = async (req, res) => {
         </div>
 
         <div class="w-full max-w-[728px] h-[90px] bg-gray-200 border-2 border-dashed border-gray-300 rounded-lg mb-8 flex items-center justify-center text-gray-400 ad-space">
-            Advertisement Space
+            Advertisement Space (Top)
         </div>
 
         <div class="bg-white p-8 rounded-2xl shadow-xl text-center max-w-sm w-full border border-gray-100 relative overflow-hidden z-10">
           <div class="absolute top-0 left-0 w-full h-1 bg-gray-100">
-            <div id="progress-bar" class="h-full bg-indigo-600 transition-all duration-[5000ms] ease-linear w-0"></div>
+            <div id="progress-bar" class="h-full bg-indigo-600 transition-all ease-linear w-0" style="transition-duration: ${WAIT_TIME_SECONDS * 1000}ms;"></div>
           </div>
 
           <h2 class="text-2xl font-bold text-gray-800 mb-2">Redirecting...</h2>
           <p class="text-gray-500 mb-8 text-sm">Please wait while we secure your link.</p>
           
           <div class="relative flex items-center justify-center mb-8">
-             <div class="text-6xl font-black text-indigo-600" id="timer">5</div>
+             <div class="text-6xl font-black text-indigo-600" id="timer">${WAIT_TIME_SECONDS}</div>
           </div>
           
           <button id="skip-btn" class="w-full bg-gray-300 text-white font-bold py-3 px-4 rounded-lg cursor-not-allowed transition-colors" disabled>
@@ -116,17 +114,24 @@ exports.redirectUrl = async (req, res) => {
           </button>
         </div>
 
+        <div class="mt-8 w-[300px] h-[250px] bg-gray-200 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center text-gray-400 ad-space">
+            Advertisement Space (Bottom)
+        </div>
+
         <p class="mt-auto mb-4 text-xs text-gray-400">Powered by Panda URL Shortener</p>
 
         <script>
-          let count = 5;
+          let count = ${WAIT_TIME_SECONDS};
+          const destination = "${url.original_url}";
+
           const timerElement = document.getElementById('timer');
           const btnElement = document.getElementById('skip-btn');
           const progressBar = document.getElementById('progress-bar');
-          const destination = "${url.original_url}";
 
+          // Start Progress Bar
           setTimeout(() => { progressBar.style.width = '100%'; }, 100);
 
+          // Countdown Logic
           const countdown = setInterval(() => {
             count--;
             timerElement.innerText = count;
