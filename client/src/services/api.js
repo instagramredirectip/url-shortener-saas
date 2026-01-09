@@ -1,15 +1,16 @@
 import axios from 'axios';
 
-// Create an Axios instance with default settings
+// Logic: If a cloud URL is provided, use it. Otherwise, use localhost.
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api', // Pointing to our backend
+  baseURL: BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
 // Request Interceptor: Automatically add the Token to headers
-// This means you don't have to manually add "Bearer token" for every request
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
