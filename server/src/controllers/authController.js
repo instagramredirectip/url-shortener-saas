@@ -3,9 +3,8 @@ const bcrypt = require('bcryptjs');
 const generateToken = require('../utils/generateToken');
 const Joi = require('joi'); 
 
-// --- VALIDATION SCHEMAS ---
+// --- 1. VALIDATION SCHEMAS (CRITICAL FIX HERE) ---
 const registerSchema = Joi.object({
-  name: Joi.string().min(2).required(), // RESTORED: Name is required again
   email: Joi.string().email().required(),
   password: Joi.string().min(6).required()
 });
@@ -21,11 +20,13 @@ exports.register = async (req, res) => {
   try {
     // 1. Validate Input
     const { error } = registerSchema.validate(req.body);
+    
     if (error) {
+      console.error("Validation Error:", error.details[0].message);
       return res.status(400).json({ error: error.details[0].message });
     }
 
-    const { name, email, password } = req.body;
+    const { email, password } = req.body;
 
     // 2. Check if user exists
     const userExists = await db.query('SELECT * FROM users WHERE email = $1', [email]);
@@ -39,15 +40,14 @@ exports.register = async (req, res) => {
 
     // 4. Insert User
     const newUser = await db.query(
-      'INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id, name, email',
-      [name, email, hashedPassword]
+      'INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id, email',
+      [email, hashedPassword]
     );
 
     // 5. Respond with Token
     const user = newUser.rows[0];
     res.status(201).json({
       id: user.id,
-      name: user.name,
       email: user.email,
       token: generateToken(user.id),
     });
@@ -84,7 +84,6 @@ exports.login = async (req, res) => {
 
     res.json({
       id: user.id,
-      name: user.name,
       email: user.email,
       token: generateToken(user.id),
     });

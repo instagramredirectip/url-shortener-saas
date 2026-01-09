@@ -8,7 +8,6 @@ import loginGif from '../assets/login.gif';
 const Register = () => {
   // Added 'confirmPassword' to state
   const [formData, setFormData] = useState({ 
-    name: '', 
     email: '', 
     password: '', 
     confirmPassword: '' 
@@ -31,7 +30,6 @@ const Register = () => {
     try {
       // 2. Prepare data (exclude confirmPassword from API call)
       const payload = {
-        name: formData.name,
         email: formData.email,
         password: formData.password
       };
@@ -69,18 +67,6 @@ const Register = () => {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm space-y-4">
             
-            {/* NAME FIELD */}
-            <div>
-              <input
-                name="name"
-                type="text"
-                required
-                className="appearance-none relative block w-full px-4 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
-                placeholder="Full Name"
-                onChange={handleChange}
-              />
-            </div>
-
             {/* EMAIL FIELD */}
             <div>
               <input
