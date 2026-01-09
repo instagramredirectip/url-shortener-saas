@@ -3,11 +3,17 @@ import api from '../services/api';
 import { useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
-// IMPORT YOUR GIF
 import loginGif from '../assets/login.gif';
 
 const Register = () => {
-  const [formData, setFormData] = useState({ name: '', email: '', password: '' });
+  // Added 'confirmPassword' to state
+  const [formData, setFormData] = useState({ 
+    name: '', 
+    email: '', 
+    password: '', 
+    confirmPassword: '' 
+  });
+  
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -15,9 +21,22 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // 1. Client-Side Validation: Check Passwords
+    if (formData.password !== formData.confirmPassword) {
+      return toast.error("Passwords do not match!");
+    }
+
     setLoading(true);
     try {
-      const { data } = await api.post('/auth/register', formData);
+      // 2. Prepare data (exclude confirmPassword from API call)
+      const payload = {
+        name: formData.name,
+        email: formData.email,
+        password: formData.password
+      };
+
+      const { data } = await api.post('/auth/register', payload);
       localStorage.setItem('token', data.token);
       toast.success('Account created!');
       navigate('/dashboard');
@@ -49,6 +68,8 @@ const Register = () => {
 
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm space-y-4">
+            
+            {/* NAME FIELD */}
             <div>
               <input
                 name="name"
@@ -59,6 +80,8 @@ const Register = () => {
                 onChange={handleChange}
               />
             </div>
+
+            {/* EMAIL FIELD */}
             <div>
               <input
                 name="email"
@@ -69,13 +92,28 @@ const Register = () => {
                 onChange={handleChange}
               />
             </div>
+
+            {/* PASSWORD FIELD */}
             <div>
               <input
                 name="password"
                 type="password"
                 required
+                minLength={6}
                 className="appearance-none relative block w-full px-4 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
-                placeholder="Password"
+                placeholder="Password (Min 6 chars)"
+                onChange={handleChange}
+              />
+            </div>
+
+            {/* CONFIRM PASSWORD FIELD */}
+            <div>
+              <input
+                name="confirmPassword"
+                type="password"
+                required
+                className="appearance-none relative block w-full px-4 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
+                placeholder="Confirm Password"
                 onChange={handleChange}
               />
             </div>

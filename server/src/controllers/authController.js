@@ -1,11 +1,11 @@
 const db = require('../config/db');
 const bcrypt = require('bcryptjs');
 const generateToken = require('../utils/generateToken');
-const Joi = require('joi'); // Ensure Joi is required
+const Joi = require('joi'); 
 
-// Validation Schemas
+// --- VALIDATION SCHEMAS ---
 const registerSchema = Joi.object({
-  name: Joi.string().min(2).required(), // FIX: Added 'name' here
+  name: Joi.string().min(2).required(), // RESTORED: Name is required again
   email: Joi.string().email().required(),
   password: Joi.string().min(6).required()
 });
@@ -38,7 +38,6 @@ exports.register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // 4. Insert User
-    // Ensure your database has a 'name' column. If not, see the SQL fix below.
     const newUser = await db.query(
       'INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id, name, email',
       [name, email, hashedPassword]
@@ -54,7 +53,7 @@ exports.register = async (req, res) => {
     });
 
   } catch (err) {
-    console.error(err);
+    console.error("Register Error:", err);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -63,7 +62,6 @@ exports.register = async (req, res) => {
 // @route   POST /api/auth/login
 exports.login = async (req, res) => {
   try {
-    // 1. Validate Input
     const { error } = loginSchema.validate(req.body);
     if (error) {
       return res.status(400).json({ error: error.details[0].message });
@@ -71,7 +69,6 @@ exports.login = async (req, res) => {
 
     const { email, password } = req.body;
 
-    // 2. Check for user
     const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
     
     if (result.rows.length === 0) {
@@ -80,13 +77,11 @@ exports.login = async (req, res) => {
 
     const user = result.rows[0];
 
-    // 3. Check password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    // 4. Respond with Token
     res.json({
       id: user.id,
       name: user.name,
