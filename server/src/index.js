@@ -5,6 +5,7 @@ const db = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const urlRoutes = require('./routes/urlRoutes');
 
+const { redirectUrl } = require('./controllers/urlController');
 const app = express();
 
 // --- SECURITY CONFIGURATION (CORS) ---
@@ -27,6 +28,8 @@ app.use(express.json());
 // --- ROUTES ---
 app.use('/api/auth', authRoutes);
 app.use('/api/urls', urlRoutes);
+
+app.get('/:code', redirectUrl);
 
 // Health Check Endpoint (To see if server is alive)
 app.get('/', (req, res) => {

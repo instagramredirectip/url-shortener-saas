@@ -100,3 +100,38 @@ exports.getMyUrls = async (req, res) => {
     res.status(500).json({ error: 'Server error while fetching URLs' });
   }
 };
+
+// ... existing code ...
+
+// @desc    Redirect short code to original URL
+// @route   GET /:code
+exports.redirectUrl = async (req, res) => {
+  try {
+    const { code } = req.params;
+    
+    // 1. Find the URL in the database
+    const result = await db.query(
+      'SELECT id, original_url FROM urls WHERE short_code = $1',
+      [code]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).send('URL not found');
+    }
+
+    const url = result.rows[0];
+
+    // 2. Track the click (Fire and forget - don't wait for it)
+    const ip = req.ip || req.connection.remoteAddress;
+    db.query('INSERT INTO clicks (url_id, ip_address) VALUES ($1, $2)', [url.id, ip]);
+    db.query('UPDATE urls SET click_count = click_count + 1 WHERE id = $1', [url.id]);
+
+    // 3. The Magic Redirect
+    // 301 = Permanent, 302 = Temporary. We use 302 so we can still track clicks.
+    return res.redirect(url.original_url);
+
+  } catch (err) {
+    console.error("Redirect Error:", err);
+    res.status(500).send('Server error');
+  }
+};
