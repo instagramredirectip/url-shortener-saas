@@ -135,3 +135,42 @@ exports.redirectUrl = async (req, res) => {
     res.status(500).send('Server error');
   }
 };
+
+// @desc    Get click statistics for a URL (Last 7 days)
+// @route   GET /api/urls/:id/analytics
+exports.getUrlAnalytics = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id; // From auth middleware
+
+    // 1. Verify ownership (Security check)
+    const urlCheck = await db.query(
+      'SELECT id FROM urls WHERE id = $1 AND user_id = $2', 
+      [id, userId]
+    );
+    
+    if (urlCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    // 2. Get clicks per day for last 7 days
+    // This SQL magic groups clicks by date
+    const query = `
+      SELECT 
+        TO_CHAR(created_at, 'Mon DD') as date, 
+        COUNT(*) as count 
+      FROM clicks 
+      WHERE url_id = $1 
+      AND created_at >= NOW() - INTERVAL '7 days'
+      GROUP BY TO_CHAR(created_at, 'Mon DD'), DATE(created_at)
+      ORDER BY DATE(created_at) ASC;
+    `;
+
+    const result = await db.query(query, [id]);
+    res.json(result.rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Analytics error' });
+  }
+};
