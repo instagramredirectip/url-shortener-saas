@@ -24,7 +24,8 @@ exports.shortenUrl = async (req, res) => {
     
     const result = await db.query(query, [userId, originalUrl, shortCode]);
     
-    // 3. Send back the created object (Important: Postgres returns snake_case 'short_code')
+    // 3. Send back the created object
+    // Note: Postgres returns snake_case 'short_code'
     res.json(result.rows[0]);
 
   } catch (err) {
@@ -65,7 +66,7 @@ exports.redirectUrl = async (req, res) => {
 
     const url = result.rows[0];
 
-    // 2. Async Tracking (Don't wait)
+    // 2. Async Tracking (Fire and forget)
     const ip = req.ip || req.connection.remoteAddress;
     db.query('INSERT INTO clicks (url_id, ip_address) VALUES ($1, $2)', [url.id, ip]);
     db.query('UPDATE urls SET click_count = click_count + 1 WHERE id = $1', [url.id]);

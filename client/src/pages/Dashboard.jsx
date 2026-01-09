@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import { useNavigate } from 'react-router-dom';
 import { BarChart2, Copy, ExternalLink, Trash2, Link as LinkIcon, Loader2, LogOut } from 'lucide-react';
 import AnalyticsCard from '../components/AnalyticsCard';
 
@@ -22,10 +22,9 @@ const Dashboard = () => {
         const { data } = await api.get('/urls/myurls');
         setUrls(data);
       } catch (error) {
-        toast.error('Failed to load your links');
-        // If auth failed, redirect to login
-        if (error.response && error.response.status === 401) {
-            navigate('/login');
+        // Only show error if it's NOT an auth error (auth errors handled by interceptor/redirect)
+        if (error.response && error.response.status !== 401) {
+             toast.error('Failed to load your links');
         }
       } finally {
         setLoading(false);
@@ -49,7 +48,7 @@ const Dashboard = () => {
     setCreating(true);
     try {
       const { data } = await api.post('/urls/shorten', { originalUrl: newUrl });
-      // Add new link to list immediately
+      // Add new link to top of list immediately
       setUrls([data, ...urls]); 
       setNewUrl('');
       toast.success('Link shortened!');
@@ -149,8 +148,12 @@ const Dashboard = () => {
         )}
 
         {urls.map((url) => {
-          // SAFE URL CONSTRUCTION: Check if short_code exists
-          const code = url.short_code || url.shortCode || 'ERROR';
+          // CRITICAL FIX: Check for 'short_code' (snake_case) which comes from Postgres
+          const code = url.short_code || url.shortCode; 
+          
+          // Only render if code exists to avoid "go.pandalime.com/" error
+          if (!code) return null; 
+
           const shortUrlDisplay = `go.pandalime.com/${code}`;
           const fullLink = `https://${shortUrlDisplay}`;
 
