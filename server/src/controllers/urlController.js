@@ -1,5 +1,5 @@
 const db = require('../config/db');
-// ✅ FIX: Changed 'generateCode' to 'generateShortCode' to match the actual filename
+// Ensure this matches your actual file name in /utils/
 const { generateShortCode } = require('../utils/generateShortCode');
 
 // @desc    Create a short URL
@@ -46,12 +46,13 @@ exports.getMyUrls = async (req, res) => {
   }
 };
 
-// @desc    Redirect short code to original URL
+// @desc    Show Ad Page then Redirect (Monetization Logic)
 // @route   GET /:code
 exports.redirectUrl = async (req, res) => {
   try {
     const { code } = req.params;
     
+    // 1. Find the URL
     const result = await db.query('SELECT id, original_url FROM urls WHERE short_code = $1', [code]);
 
     if (result.rows.length === 0) {
@@ -60,12 +61,96 @@ exports.redirectUrl = async (req, res) => {
 
     const url = result.rows[0];
 
-    // Async Tracking
+    // 2. Track the click
     const ip = req.ip || req.connection.remoteAddress;
     db.query('INSERT INTO clicks (url_id, ip_address) VALUES ($1, $2)', [url.id, ip]);
     db.query('UPDATE urls SET click_count = click_count + 1 WHERE id = $1', [url.id]);
 
-    return res.redirect(url.original_url);
+    // 3. Serve the HTML with Monetag Ad Script
+    const html = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Panda Shortener - Please Wait</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        
+        <script>
+            (function(s){
+                s.dataset.zone='10437929';
+                s.src='https://gizokraijaw.net/vignette.min.js';
+            })([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')));
+        </script>
+
+        <style>
+            @keyframes pulse-slow { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
+            .ad-space { animation: pulse-slow 2s infinite; }
+        </style>
+      </head>
+      <body class="bg-gray-50 flex flex-col items-center min-h-screen font-sans">
+        
+        <div class="w-full bg-white shadow-sm p-4 flex justify-between items-center mb-8">
+            <h1 class="text-xl font-bold text-indigo-600">Panda<span class="text-gray-800">Lime</span></h1>
+            <span class="text-xs font-semibold bg-green-100 text-green-700 px-2 py-1 rounded">SECURE REDIRECT</span>
+        </div>
+
+        <div class="w-full max-w-[728px] h-[90px] bg-gray-200 border-2 border-dashed border-gray-300 rounded-lg mb-8 flex items-center justify-center text-gray-400 ad-space">
+            Advertisement Space
+        </div>
+
+        <div class="bg-white p-8 rounded-2xl shadow-xl text-center max-w-sm w-full border border-gray-100 relative overflow-hidden z-10">
+          <div class="absolute top-0 left-0 w-full h-1 bg-gray-100">
+            <div id="progress-bar" class="h-full bg-indigo-600 transition-all duration-[5000ms] ease-linear w-0"></div>
+          </div>
+
+          <h2 class="text-2xl font-bold text-gray-800 mb-2">Redirecting...</h2>
+          <p class="text-gray-500 mb-8 text-sm">Please wait while we secure your link.</p>
+          
+          <div class="relative flex items-center justify-center mb-8">
+             <div class="text-6xl font-black text-indigo-600" id="timer">5</div>
+          </div>
+          
+          <button id="skip-btn" class="w-full bg-gray-300 text-white font-bold py-3 px-4 rounded-lg cursor-not-allowed transition-colors" disabled>
+            Please Wait...
+          </button>
+        </div>
+
+        <p class="mt-auto mb-4 text-xs text-gray-400">Powered by Panda URL Shortener</p>
+
+        <script>
+          let count = 5;
+          const timerElement = document.getElementById('timer');
+          const btnElement = document.getElementById('skip-btn');
+          const progressBar = document.getElementById('progress-bar');
+          const destination = "${url.original_url}";
+
+          setTimeout(() => { progressBar.style.width = '100%'; }, 100);
+
+          const countdown = setInterval(() => {
+            count--;
+            timerElement.innerText = count;
+            
+            if (count <= 0) {
+              clearInterval(countdown);
+              timerElement.style.display = 'none';
+              btnElement.innerText = "Continue to Link";
+              btnElement.classList.remove('bg-gray-300', 'cursor-not-allowed');
+              btnElement.classList.add('bg-indigo-600', 'hover:bg-indigo-700', 'shadow-lg');
+              btnElement.disabled = false;
+              
+              // Auto Redirect
+              window.location.href = destination;
+              
+              btnElement.onclick = () => { window.location.href = destination; };
+            }
+          }, 1000);
+        </script>
+      </body>
+      </html>
+    `;
+    
+    res.send(html);
 
   } catch (err) {
     console.error("Redirect Error:", err);
