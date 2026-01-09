@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../services/api'; // We use the API helper
-import { Copy, Check, Loader2, Link as LinkIcon } from 'lucide-react';
-import footerImg from '../assets/footer.png'; 
+import api from '../services/api'; 
+import { Copy, Check, Loader2 } from 'lucide-react';
+
+// FIX: Removed the local image import that was causing the crash
+// import footerImg from '../assets/footer.png'; 
 
 const Home = () => {
   const [inputUrl, setInputUrl] = useState('');
@@ -20,9 +22,7 @@ const Home = () => {
     setShortLink(null);
 
     try {
-      // API call (works with or without login token)
       const { data } = await api.post('/urls/shorten', { originalUrl: inputUrl });
-      
       const fullShortUrl = `https://go.pandalime.com/${data.short_code}`;
       setShortLink(fullShortUrl);
       setInputUrl('');
@@ -51,7 +51,7 @@ const Home = () => {
         </div>
       </nav>
 
-      {/* Hero Section with SHORTENER */}
+      {/* Hero Section */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-16 text-center flex-grow">
         <h1 className="text-5xl md:text-6xl font-extrabold text-gray-900 tracking-tight mb-6">
           Shorten URLs in <span className="text-primary">One Click.</span>
@@ -61,7 +61,7 @@ const Home = () => {
           <span className="text-sm font-semibold text-indigo-500">Free Forever. No Credit Card Required.</span>
         </p>
         
-        {/* --- MAIN INPUT FORM --- */}
+        {/* Input Form */}
         <div className="max-w-2xl mx-auto bg-white p-2 rounded-2xl shadow-xl border border-gray-200 flex flex-col sm:flex-row gap-2 mb-8">
           <input 
             type="url" 
@@ -80,7 +80,7 @@ const Home = () => {
           </button>
         </div>
 
-        {/* --- RESULT CARD --- */}
+        {/* Result Card */}
         {error && <p className="text-red-500 font-medium mb-6">{error}</p>}
         
         {shortLink && (
@@ -98,7 +98,6 @@ const Home = () => {
           </div>
         )}
 
-        {/* CTA for Analytics */}
         <div className="text-sm text-gray-400">
           Want custom names (e.g., /bubble) and analytics? <Link to="/register" className="text-primary hover:underline font-semibold">Create a free account</Link>.
         </div>
@@ -125,10 +124,10 @@ const Home = () => {
         </div>
       </div>
 
-      {/* Footer Image */}
+      {/* Footer Image - USING PLACEHOLDER TO FIX BUILD */}
       <footer className="w-full mt-auto">
         <img 
-          src={footerImg} 
+          src="https://i.pinimg.com/736x/07/a3/12/07a3127d57215a6ca2a5465cdd5d06ac.jpg" 
           alt="PandaLime Footer" 
           className="w-full h-auto object-cover max-h-[400px]" 
         />
