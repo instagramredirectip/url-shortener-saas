@@ -3,17 +3,49 @@ const { generateShortCode } = require('../utils/generateShortCode');
 
 // @desc    Create a short URL
 // @route   POST /api/urls/shorten
+// @desc    Create a short URL (Public & Private)
+// @route   POST /api/urls/shorten
 exports.shortenUrl = async (req, res) => {
-  const { originalUrl } = req.body;
+  const { originalUrl, customAlias } = req.body;
   
   if (!originalUrl) {
     return res.status(400).json({ error: 'Original URL is required' });
   }
 
   try {
-    const shortCode = generateShortCode();
-    const userId = req.user.id;
+    let shortCode;
+    
+    // 1. Handle Custom Alias (Logged-in users only usually, but logic works for both)
+    if (customAlias) {
+      // Sanitize: Allow only letters, numbers, and dashes
+      const sanitizedAlias = customAlias.trim().replace(/[^a-zA-Z0-9-]/g, '');
+      
+      if (sanitizedAlias.length < 3 || sanitizedAlias.length > 20) {
+        return res.status(400).json({ error: 'Custom alias must be 3-20 characters' });
+      }
 
+      // Check for collision
+      const exists = await db.query('SELECT id FROM urls WHERE short_code = $1', [sanitizedAlias]);
+      if (exists.rows.length > 0) {
+        return res.status(400).json({ error: 'This alias is already taken. Try another.' });
+      }
+      
+      shortCode = sanitizedAlias;
+    } else {
+      // 2. Generate Random Code if no custom alias
+      shortCode = generateShortCode();
+      
+      // Tiny chance of collision, retry once if happens
+      const check = await db.query('SELECT id FROM urls WHERE short_code = $1', [shortCode]);
+      if (check.rows.length > 0) {
+        shortCode = generateShortCode();
+      }
+    }
+
+    // 3. Determine User ID (Can be NULL for anonymous)
+    const userId = req.user ? req.user.id : null;
+
+    // 4. Save to DB
     const query = `
       INSERT INTO urls (user_id, original_url, short_code)
       VALUES ($1, $2, $3)
