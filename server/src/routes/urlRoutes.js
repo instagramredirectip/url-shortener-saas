@@ -1,18 +1,17 @@
 const express = require('express');
 const router = express.Router();
-// Import BOTH functions in a single line
-const { shortenUrl, getMyUrls } = require('../controllers/urlController');
 const { protect } = require('../middleware/authMiddleware');
-const { shortenUrl, getMyUrls, getUrlAnalytics } = require('../controllers/urlController');
+const { 
+  shortenUrl, 
+  getMyUrls, 
+  getUrlAnalytics, 
+  deleteUrl 
+} = require('../controllers/urlController');
 
-// POST /api/urls/shorten
-// Protected: Only logged-in users can shorten URLs
+// All these need protection (Login required)
 router.post('/shorten', protect, shortenUrl);
-
-// GET /api/urls/mine
-// Protected: Get current user's history
-router.get('/mine', protect, getMyUrls);
-// GET /api/urls/:id/analytics
+router.get('/myurls', protect, getMyUrls);
 router.get('/:id/analytics', protect, getUrlAnalytics);
+router.delete('/:id', protect, deleteUrl);
 
 module.exports = router;
