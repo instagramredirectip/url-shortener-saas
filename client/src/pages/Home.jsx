@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react'; // Added useRef
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api'; 
-import { Copy, Check, Loader2, LayoutDashboard } from 'lucide-react';
+// Added Volume2 and VolumeX for the video controls
+import { Copy, Check, Loader2, LayoutDashboard, Volume2, VolumeX } from 'lucide-react';
 
 const Home = () => {
   const [inputUrl, setInputUrl] = useState('');
@@ -13,6 +14,10 @@ const Home = () => {
   // NEW: Check login status
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const navigate = useNavigate();
+
+  // VIDEO STATE
+  const [isMuted, setIsMuted] = useState(true);
+  const videoRef = useRef(null);
 
   useEffect(() => {
     // Check if token exists in storage
@@ -45,6 +50,13 @@ const Home = () => {
     navigator.clipboard.writeText(shortLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const toggleMute = () => {
+    if (videoRef.current) {
+      videoRef.current.muted = !isMuted;
+      setIsMuted(!isMuted);
+    }
   };
 
   return (
@@ -121,10 +133,38 @@ const Home = () => {
 
         {/* Conditional Footer Text */}
         {!isLoggedIn && (
-          <div className="text-sm text-gray-400">
+          <div className="text-sm text-gray-400 mb-12">
             Want custom names (e.g., /bubble) and analytics? <Link to="/register" className="text-primary hover:underline font-semibold">Create a free account</Link>.
           </div>
         )}
+
+        {/* VIDEO SHOWCASE SECTION */}
+        <div className="w-full max-w-4xl mx-auto mt-8 mb-16 px-2 sm:px-0">
+          <div className="relative group rounded-3xl overflow-hidden shadow-2xl ring-4 ring-white border border-gray-100 bg-gray-900 aspect-video transform hover:scale-[1.01] transition-transform duration-500">
+             {/* Gradient Overlay for aesthetic depth */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent z-10 pointer-events-none"></div>
+            
+            <video
+              ref={videoRef}
+              className="w-full h-full object-cover"
+              src="https://app.pandalime.com/showcasevid.mp4"
+              autoPlay
+              loop
+              muted={isMuted}
+              playsInline
+            />
+            
+            {/* Custom Mute Control */}
+            <button
+              onClick={toggleMute}
+              className="absolute bottom-6 right-6 z-20 bg-black/40 hover:bg-black/60 backdrop-blur-md border border-white/20 text-white p-3 rounded-full transition-all duration-300 shadow-lg group-hover:bg-primary/90"
+              aria-label={isMuted ? "Unmute video" : "Mute video"}
+            >
+              {isMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
+            </button>
+          </div>
+        </div>
+
       </div>
 
       {/* Footer Image Placeholder (Using URL for stability) */}
