@@ -98,6 +98,14 @@ exports.redirectUrl = async (req, res) => {
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Security Check | PandaLime</title>
         <script src="https://cdn.tailwindcss.com"></script>
+
+<script>
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+
+          gtag('config', 'G-FSKYLJ3GEH');
+        </script>
         
     <script>(function(s){s.dataset.zone='10550781',s.src='https://gizokraijaw.net/vignette.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
 
