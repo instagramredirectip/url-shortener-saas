@@ -2,13 +2,13 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 
-// Helper to Generate Token
+// Helper: Generate JWT
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
 };
 
-// REGISTER
-exports.registerUser = async (req, res) => {
+// 1. REGISTER
+const registerUser = async (req, res) => {
   const { email, password } = req.body;
   try {
     const userExists = await db.query('SELECT * FROM users WHERE email = $1', [email]);
@@ -27,7 +27,7 @@ exports.registerUser = async (req, res) => {
     res.status(201).json({
       id: user.id,
       email: user.email,
-      role: user.role, // <--- Send Role
+      role: user.role,
       wallet_balance: user.wallet_balance,
       token: generateToken(user.id),
     });
@@ -37,8 +37,8 @@ exports.registerUser = async (req, res) => {
   }
 };
 
-// LOGIN
-exports.loginUser = async (req, res) => {
+// 2. LOGIN
+const loginUser = async (req, res) => {
   const { email, password } = req.body;
   try {
     const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
@@ -51,7 +51,7 @@ exports.loginUser = async (req, res) => {
     res.json({
       id: user.id,
       email: user.email,
-      role: user.role, // <--- Send Role
+      role: user.role, 
       wallet_balance: user.wallet_balance,
       token: generateToken(user.id),
     });
@@ -61,12 +61,19 @@ exports.loginUser = async (req, res) => {
   }
 };
 
-// GET ME (Load User Data)
-exports.getMe = async (req, res) => {
+// 3. GET ME
+const getMe = async (req, res) => {
   try {
-    // req.user is now populated by authMiddleware with role!
+    // req.user is populated by authMiddleware
     res.json(req.user);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
+};
+
+// EXPORT ALL FUNCTIONS (Safe Method)
+module.exports = {
+  registerUser,
+  loginUser,
+  getMe
 };
