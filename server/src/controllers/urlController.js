@@ -28,9 +28,11 @@ const getAdFormats = async (req, res) => {
 const shortenUrl = async (req, res) => {
   const { originalUrl, alias, isMonetized, adFormatId } = req.body;
   const userId = req.user ? req.user.id : null; // From authMiddleware
+  console.log('[DEBUG] Shorten URL request:', { originalUrl, alias, userId });
 
   // 1. Validate Original URL
   if (!validateUrl(originalUrl)) {
+    console.log('[DEBUG] URL validation failed for:', originalUrl);
     return res.status(400).json({ error: 'Invalid URL format' });
   }
 

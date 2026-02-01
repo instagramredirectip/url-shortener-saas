@@ -4,29 +4,33 @@ require('dotenv').config();
 const db = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const urlRoutes = require('./routes/urlRoutes');
+const payoutRoutes = require('./routes/payoutRoutes'); // Ensure this is imported
 
-const { redirectUrl } = require('./controllers/redirectController');
+const { redirectUrl } = require('./controllers/urlController');
 const app = express();
 
-// ... existing imports
-const payoutRoutes = require('./routes/payoutRoutes'); // <--- Import
-
-// ... existing app.use code
-app.use('/api/auth', authRoutes);
-app.use('/api/urls', urlRoutes);
-app.use('/api/payouts', payoutRoutes); // <--- Add this line
-
 // --- SECURITY CONFIGURATION (CORS) ---
-// This tells the backend: "It is okay to accept requests from these websites"
+// This enables your frontend to talk to your backend
+const allowedOrigins = [
+  'https://pandalime.com',       // Your custom domain
+  'https://www.pandalime.com',   // Your custom domain (www)
+  'http://localhost:5173',       // Local testing
+  'http://localhost:3000'        // Alternate local testing
+];
+
 app.use(cors({
-  origin: [
-    'https://pandalime.com',       // Your live custom domain
-    'https://www.pandalime.com',   // Your live custom domain (www version)
-    'http://localhost:5173',       // Your local development (for testing)
-    // You can also add your Render frontend URL if you want to support both:
-    // 'https://url-shortener-client-xxxx.onrender.com' 
-  ],
-  credentials: true, // Allow cookies/headers if needed
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or server-to-server)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
+    } else {
+      console.log('BLOCKED CORS ORIGIN:', origin); // <--- Logs the blocked URL in Render
+      return callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true, // Required for cookies/sessions
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 
@@ -36,10 +40,12 @@ app.use(express.json());
 // --- ROUTES ---
 app.use('/api/auth', authRoutes);
 app.use('/api/urls', urlRoutes);
+app.use('/api/payouts', payoutRoutes); // Add Payouts Route
 
+// Redirect Endpoint (Must be last)
 app.get('/:code', redirectUrl);
 
-// Health Check Endpoint (To see if server is alive)
+// Health Check
 app.get('/', (req, res) => {
   res.send('Panda URL Shortener API is running...');
 });

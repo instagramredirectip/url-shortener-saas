@@ -28,9 +28,19 @@ const urlSchema = Joi.object({
   })
 });
 
+const validateUrl = (url) => {
+  try {
+    Joi.assert({ originalUrl: url }, urlSchema);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
 // Update module.exports to include it
 module.exports = {
   registerSchema,
   loginSchema,
-  urlSchema 
+  urlSchema,
+  validateUrl
 };

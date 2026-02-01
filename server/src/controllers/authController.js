@@ -38,17 +38,27 @@ const register = async (req, res) => {
 
 const login = async (req, res) => {
   const { email, password } = req.body;
+  console.log('[DEBUG] Login attempt for email:', email);
   try {
     const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    console.log('[DEBUG] User found:', result.rows.length > 0 ? 'YES' : 'NO');
     
-    if (result.rows.length === 0) return res.status(400).json({ error: 'Invalid credentials' });
+    if (result.rows.length === 0) {
+      console.log('[DEBUG] No user found with email:', email);
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
 
     const user = result.rows[0];
     const isMatch = await bcrypt.compare(password, user.password_hash);
+    console.log('[DEBUG] Password match:', isMatch ? 'YES' : 'NO');
 
-    if (!isMatch) return res.status(400).json({ error: 'Invalid credentials' });
+    if (!isMatch) {
+      console.log('[DEBUG] Password does not match for user:', email);
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
 
     const token = generateToken(user.id);
+    console.log('[DEBUG] Login successful for user:', email);
 
     // Return user info WITHOUT password
     res.json({
