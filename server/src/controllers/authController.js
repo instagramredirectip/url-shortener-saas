@@ -1,74 +1,35 @@
-const db = require('../config/db');
 const bcrypt = require('bcryptjs');
-const generateToken = require('../utils/generateToken'); // Ensure this path is correct
+const jwt = require('jsonwebtoken');
+const db = require('../config/db');
 
-const register = async (req, res) => {
+// Helper to Generate Token
+const generateToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
+};
+
+// REGISTER
+exports.registerUser = async (req, res) => {
   const { email, password } = req.body;
-  // Basic validation
-  if (!email || !password) return res.status(400).json({ error: 'All fields required' });
-
   try {
-    // Check if user exists
     const userExists = await db.query('SELECT * FROM users WHERE email = $1', [email]);
-    if (userExists.rows.length > 0) {
-      return res.status(400).json({ error: 'User already exists' });
-    }
+    if (userExists.rows.length > 0) return res.status(400).json({ error: 'User already exists' });
 
-    // Hash password
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Insert User
+    // Default role is 'user'
     const newUser = await db.query(
-      `INSERT INTO users (email, password_hash, role, wallet_balance, total_earnings) 
-       VALUES ($1, $2, 'user', 0.00, 0.00) RETURNING id, email, role`,
-      [email, hashedPassword]
+      'INSERT INTO users (email, password, role) VALUES ($1, $2, $3) RETURNING id, email, role, wallet_balance',
+      [email, hashedPassword, 'user']
     );
 
     const user = newUser.rows[0];
-    const token = generateToken(user.id);
-
-    res.status(201).json({ user, token });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Server error' });
-  }
-};
-
-const login = async (req, res) => {
-  const { email, password } = req.body;
-  console.log('[DEBUG] Login attempt for email:', email);
-  try {
-    const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
-    console.log('[DEBUG] User found:', result.rows.length > 0 ? 'YES' : 'NO');
-    
-    if (result.rows.length === 0) {
-      console.log('[DEBUG] No user found with email:', email);
-      return res.status(400).json({ error: 'Invalid credentials' });
-    }
-
-    const user = result.rows[0];
-    const isMatch = await bcrypt.compare(password, user.password_hash);
-    console.log('[DEBUG] Password match:', isMatch ? 'YES' : 'NO');
-
-    if (!isMatch) {
-      console.log('[DEBUG] Password does not match for user:', email);
-      return res.status(400).json({ error: 'Invalid credentials' });
-    }
-
-    const token = generateToken(user.id);
-    console.log('[DEBUG] Login successful for user:', email);
-
-    // Return user info WITHOUT password
-    res.json({
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        wallet_balance: user.wallet_balance, // <--- IMPORTANT
-      },
-      token
+    res.status(201).json({
+      id: user.id,
+      email: user.email,
+      role: user.role, // <--- Send Role
+      wallet_balance: user.wallet_balance,
+      token: generateToken(user.id),
     });
   } catch (err) {
     console.error(err);
@@ -76,46 +37,36 @@ const login = async (req, res) => {
   }
 };
 
-// --- NEW: Get Current User Profile (For Dashboard Refresh) ---
-const getMe = async (req, res) => {
+// LOGIN
+exports.loginUser = async (req, res) => {
+  const { email, password } = req.body;
   try {
-    const result = await db.query(
-      'SELECT id, email, role, wallet_balance, total_earnings, bank_account_no, upi_id FROM users WHERE id = $1',
-      [req.user.id]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    res.json(result.rows[0]);
+    const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (result.rows.length === 0) return res.status(400).json({ error: 'Invalid credentials' });
+
+    const user = result.rows[0];
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(400).json({ error: 'Invalid credentials' });
+
+    res.json({
+      id: user.id,
+      email: user.email,
+      role: user.role, // <--- Send Role
+      wallet_balance: user.wallet_balance,
+      token: generateToken(user.id),
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
-
-// ... existing imports and functions
-
-const updatePaymentDetails = async (req, res) => {
-  const { bank_account_no, bank_ifsc, bank_holder_name, upi_id } = req.body;
-  
+// GET ME (Load User Data)
+exports.getMe = async (req, res) => {
   try {
-    const updatedUser = await db.query(
-      `UPDATE users 
-       SET bank_account_no = $1, bank_ifsc = $2, bank_holder_name = $3, upi_id = $4 
-       WHERE id = $5 
-       RETURNING id, email, bank_account_no, bank_ifsc, bank_holder_name, upi_id`,
-      [bank_account_no, bank_ifsc, bank_holder_name, upi_id, req.user.id]
-    );
-
-    res.json(updatedUser.rows[0]);
+    // req.user is now populated by authMiddleware with role!
+    res.json(req.user);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to update payment details' });
+    res.status(500).json({ error: 'Server error' });
   }
 };
-
-// Update module.exports to include it
-module.exports = { register, login, getMe, updatePaymentDetails };
