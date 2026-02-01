@@ -1,104 +1,71 @@
 const db = require('../config/db');
 const { validateUrl } = require('../utils/validation');
-const { generateShortCode } = require('../utils/generateShortCode');
 
-// --- NEW: Fetch available Ad Formats & Rates for the Frontend ---
+// 1. GET AD FORMATS (Fixes Empty Dropdown)
 const getAdFormats = async (req, res) => {
   try {
-    // We join ad_formats with ad_rates to show the user how much they will earn
     const result = await db.query(`
-      SELECT 
-        af.id, 
-        af.display_name, 
-        af.description, 
-        ar.cpm_rate_inr 
+      SELECT af.id, af.display_name, af.description, ar.cpm_rate_inr
       FROM ad_formats af
       JOIN ad_rates ar ON af.id = ar.ad_format_id
       WHERE af.is_active = TRUE
       ORDER BY ar.cpm_rate_inr DESC
     `);
-    
     res.json(result.rows);
   } catch (err) {
-    console.error('Error fetching ad formats:', err);
+    console.error(err);
     res.status(500).json({ error: 'Server error fetching ad formats' });
   }
 };
 
-const shortenUrl = async (req, res) => {
-  const { originalUrl, alias, isMonetized, adFormatId } = req.body;
-  const userId = req.user ? req.user.id : null; // From authMiddleware
-  console.log('[DEBUG] Shorten URL request:', { originalUrl, alias, userId });
+// 2. CREATE SHORT URL
+const createShortUrl = async (req, res) => {
+  const { originalUrl, alias, adFormatId } = req.body;
+  const userId = req.user ? req.user.id : null;
 
-  // 1. Validate Original URL
   if (!validateUrl(originalUrl)) {
-    console.log('[DEBUG] URL validation failed for:', originalUrl);
     return res.status(400).json({ error: 'Invalid URL format' });
   }
 
   try {
     let shortCode;
-
-    // 2. Handle Custom Alias
+    // Custom Alias Logic
     if (alias) {
-      if (alias.length < 3 || alias.length > 20) {
-        return res.status(400).json({ error: 'Alias must be 3-20 characters' });
-      }
-      
       const existing = await db.query('SELECT id FROM urls WHERE short_code = $1', [alias]);
-      if (existing.rows.length > 0) {
-        return res.status(400).json({ error: 'Alias already taken' });
-      }
+      if (existing.rows.length > 0) return res.status(400).json({ error: 'Alias already exists' });
       shortCode = alias;
     } else {
-      // 3. Generate Random Short Code if no alias
-      shortCode = generateShortCode();
-      let isUnique = false;
-      let attempts = 0;
-
-      while (!isUnique && attempts < 5) {
-        const existing = await db.query('SELECT id FROM urls WHERE short_code = $1', [shortCode]);
-        if (existing.rows.length === 0) {
-          isUnique = true;
-        } else {
-          shortCode = generateShortCode();
-          attempts++;
-        }
-      }
-
-      if (!isUnique) {
-        return res.status(500).json({ error: 'Failed to generate unique code. Please try again.' });
-      }
+      shortCode = Math.random().toString(36).substring(2, 8);
     }
 
-    // 4. INSERT into Database (With Monetization Info)
-    // We default monetization to false if not provided
+    // Monetization Logic
+    let isMonetized = false;
+    let finalAdFormatId = null;
+
+    if (userId && adFormatId) {
+       isMonetized = true;
+       finalAdFormatId = adFormatId;
+    }
+
     const newUrl = await db.query(
-      `INSERT INTO urls (user_id, original_url, short_code, is_monetized, ad_format_id) 
+      `INSERT INTO urls (original_url, short_code, user_id, is_monetized, ad_format_id) 
        VALUES ($1, $2, $3, $4, $5) 
        RETURNING *`,
-      [
-        userId, 
-        originalUrl, 
-        shortCode, 
-        isMonetized || false, 
-        isMonetized ? adFormatId : null // Only save format ID if monetization is on
-      ]
+      [originalUrl, shortCode, userId, isMonetized, finalAdFormatId]
     );
 
-    res.status(201).json(newUrl.rows[0]);
-
+    res.json(newUrl.rows[0]);
   } catch (err) {
-    console.error('Shorten Error:', err);
+    console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
-const getUserUrls = async (req, res) => {
+// 3. GET MY URLS
+const getMyUrls = async (req, res) => {
   try {
-    // Return URLs with their stats
     const result = await db.query(
-      `SELECT * FROM urls WHERE user_id = $1 ORDER BY created_at DESC`,
+      'SELECT * FROM urls WHERE user_id = $1 ORDER BY created_at DESC',
       [req.user.id]
     );
     res.json(result.rows);
@@ -108,24 +75,49 @@ const getUserUrls = async (req, res) => {
   }
 };
 
-const deleteUrl = async (req, res) => {
+// 4. GET URL ANALYTICS (Fixes "Failed to load stats")
+const getUrlAnalytics = async (req, res) => {
+  const { id } = req.params;
   try {
-    const { id } = req.params;
-    
-    // Ensure the URL belongs to the requesting user
-    const check = await db.query('SELECT id FROM urls WHERE id = $1 AND user_id = $2', [id, req.user.id]);
-    
-    if (check.rows.length === 0) {
-      return res.status(404).json({ error: 'URL not found or unauthorized' });
-    }
+    // Verify ownership
+    const urlCheck = await db.query('SELECT * FROM urls WHERE id = $1 AND user_id = $2', [id, req.user.id]);
+    if (urlCheck.rows.length === 0) return res.status(404).json({ error: 'URL not found' });
 
-    await db.query('DELETE FROM urls WHERE id = $1', [id]);
-    res.json({ message: 'URL deleted' });
-
+    // Get clicks per day (Simple Analytics)
+    const result = await db.query(`
+      SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as date, COUNT(*) as count
+      FROM impressions
+      WHERE url_id = $1
+      GROUP BY date
+      ORDER BY date ASC
+    `, [id]);
+    
+    // If no impressions, maybe check raw click_count? 
+    // For now, let's return impressions.
+    res.json(result.rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
-module.exports = { shortenUrl, getUserUrls, deleteUrl, getAdFormats };
+// 5. DELETE URL
+const deleteUrl = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await db.query('DELETE FROM urls WHERE id = $1 AND user_id = $2 RETURNING *', [id, req.user.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'URL not found' });
+    res.json({ message: 'URL deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+module.exports = { 
+  createShortUrl, 
+  getMyUrls, 
+  deleteUrl, 
+  getAdFormats, 
+  getUrlAnalytics 
+};
