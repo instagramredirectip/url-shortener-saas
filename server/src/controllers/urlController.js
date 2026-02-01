@@ -120,10 +120,7 @@ exports.redirectUrl = async (req, res) => {
             <span class="text-xs font-semibold bg-gray-100 text-gray-500 px-2 py-1 rounded">SECURITY CHECK</span>
         </div>
 
-        <div class="w-full max-w-[728px] h-[90px] bg-gray-200 border border-dashed border-gray-300 rounded mb-6 flex items-center justify-center text-gray-400 text-sm">
-            Advertisement Space (Top)
-        </div>
-
+     
         <div class="bg-white p-8 rounded-lg shadow-md max-w-md w-full border border-gray-200">
           <h2 class="text-2xl font-semibold mb-2 text-gray-900">Verify you are human</h2>
           <p class="text-gray-500 mb-6 text-sm">Please complete the security check to access the destination link.</p>
@@ -147,9 +144,7 @@ exports.redirectUrl = async (req, res) => {
           </div>
         </div>
 
-        <div class="mt-8 w-[300px] h-[250px] bg-gray-200 border border-dashed border-gray-300 rounded flex items-center justify-center text-gray-400 text-sm">
-            Advertisement Space (Bottom)
-        </div>
+       
 
         <script>
           const destination = "${url.original_url}";
