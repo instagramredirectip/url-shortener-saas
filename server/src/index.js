@@ -1,48 +1,47 @@
 const express = require('express');
-const cors = require('cors'); // <--- Critical for custom domains
+const cors = require('cors');
 require('dotenv').config();
 const db = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const urlRoutes = require('./routes/urlRoutes');
-const payoutRoutes = require('./routes/payoutRoutes'); // Ensure this is imported
+const payoutRoutes = require('./routes/payoutRoutes');
 
-const { redirectUrl } = require('./controllers/urlController');
+// --- FIX IS HERE: Import from 'redirectController', not 'urlController' ---
+const { redirectUrl } = require('./controllers/redirectController'); 
+
 const app = express();
 
 // --- SECURITY CONFIGURATION (CORS) ---
-// This enables your frontend to talk to your backend
 const allowedOrigins = [
-  'https://pandalime.com',       // Your custom domain
-  'https://www.pandalime.com',   // Your custom domain (www)
-  'http://localhost:5173',       // Local testing
-  'http://localhost:3000'        // Alternate local testing
+  'https://pandalime.com',
+  'https://www.pandalime.com',
+  'http://localhost:5173',
+  'http://localhost:3000'
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or server-to-server)
     if (!origin) return callback(null, true);
-    
     if (allowedOrigins.indexOf(origin) !== -1) {
       return callback(null, true);
     } else {
-      console.log('BLOCKED CORS ORIGIN:', origin); // <--- Logs the blocked URL in Render
+      console.log('BLOCKED CORS ORIGIN:', origin);
       return callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true, // Required for cookies/sessions
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 
-// Middleware to parse JSON bodies
 app.use(express.json());
 
 // --- ROUTES ---
 app.use('/api/auth', authRoutes);
 app.use('/api/urls', urlRoutes);
-app.use('/api/payouts', payoutRoutes); // Add Payouts Route
+app.use('/api/payouts', payoutRoutes);
 
 // Redirect Endpoint (Must be last)
+// Now 'redirectUrl' will be a valid function, so this won't crash
 app.get('/:code', redirectUrl);
 
 // Health Check
