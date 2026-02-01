@@ -3,8 +3,6 @@ const { generateShortCode } = require('../utils/generateShortCode');
 
 // @desc    Create a short URL
 // @route   POST /api/urls/shorten
-// @desc    Create a short URL (Public & Private)
-// @route   POST /api/urls/shorten
 exports.shortenUrl = async (req, res) => {
   const { originalUrl, customAlias } = req.body;
   
@@ -15,16 +13,14 @@ exports.shortenUrl = async (req, res) => {
   try {
     let shortCode;
     
-    // 1. Handle Custom Alias (Logged-in users only usually, but logic works for both)
+    // 1. Handle Custom Alias
     if (customAlias) {
-      // Sanitize: Allow only letters, numbers, and dashes
       const sanitizedAlias = customAlias.trim().replace(/[^a-zA-Z0-9-]/g, '');
       
       if (sanitizedAlias.length < 3 || sanitizedAlias.length > 20) {
         return res.status(400).json({ error: 'Custom alias must be 3-20 characters' });
       }
 
-      // Check for collision
       const exists = await db.query('SELECT id FROM urls WHERE short_code = $1', [sanitizedAlias]);
       if (exists.rows.length > 0) {
         return res.status(400).json({ error: 'This alias is already taken. Try another.' });
@@ -32,20 +28,16 @@ exports.shortenUrl = async (req, res) => {
       
       shortCode = sanitizedAlias;
     } else {
-      // 2. Generate Random Code if no custom alias
+      // 2. Generate Random Code
       shortCode = generateShortCode();
-      
-      // Tiny chance of collision, retry once if happens
       const check = await db.query('SELECT id FROM urls WHERE short_code = $1', [shortCode]);
       if (check.rows.length > 0) {
         shortCode = generateShortCode();
       }
     }
 
-    // 3. Determine User ID (Can be NULL for anonymous)
     const userId = req.user ? req.user.id : null;
 
-    // 4. Save to DB
     const query = `
       INSERT INTO urls (user_id, original_url, short_code)
       VALUES ($1, $2, $3)
@@ -77,14 +69,10 @@ exports.getMyUrls = async (req, res) => {
   }
 };
 
-// @desc    Show Ad Page then Redirect
+// @desc    Show "Verify to Proceed" Page (Cloudflare Style)
 // @route   GET /:code
 exports.redirectUrl = async (req, res) => {
   try {
-    // --- ⚙️ CONFIGURATION --------------------------------------
-    const WAIT_TIME_SECONDS = 8; // CHANGED TO 8 SECONDS
-    // -----------------------------------------------------------
-
     const { code } = req.params;
     
     // 1. Find the URL
@@ -101,87 +89,102 @@ exports.redirectUrl = async (req, res) => {
     db.query('INSERT INTO clicks (url_id, ip_address) VALUES ($1, $2)', [url.id, ip]);
     db.query('UPDATE urls SET click_count = click_count + 1 WHERE id = $1', [url.id]);
 
-    // 3. Serve the HTML
+    // 3. Serve the HTML with "Verify" Checkbox
     const html = `
       <!DOCTYPE html>
       <html lang="en">
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Please Wait...</title>
+        <title>Security Check | PandaLime</title>
         <script src="https://cdn.tailwindcss.com"></script>
         
         <script src="https://quge5.com/88/tag.min.js" data-zone="200271" async data-cfasync="false"></script>
 
         <style>
-            @keyframes pulse-slow { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
-            .ad-space { animation: pulse-slow 2s infinite; }
+            .checkbox-spin {
+                border-top-color: transparent;
+                border-radius: 50%;
+                animation: spin 0.6s linear infinite;
+            }
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+            
+            /* Clean minimal layout similar to Cloudflare */
+            body { background-color: #f9fafb; }
         </style>
       </head>
-      <body class="bg-gray-50 flex flex-col items-center min-h-screen font-sans">
+      <body class="flex flex-col items-center min-h-screen font-sans text-gray-800">
         
-        <div class="w-full bg-white shadow-sm p-4 flex justify-between items-center mb-8">
+        <div class="w-full bg-white shadow-sm p-4 flex justify-between items-center mb-6">
             <h1 class="text-xl font-bold text-indigo-600">Panda<span class="text-gray-800">Lime</span></h1>
-            <span class="text-xs font-semibold bg-green-100 text-green-700 px-2 py-1 rounded">SECURE REDIRECT</span>
+            <span class="text-xs font-semibold bg-gray-100 text-gray-500 px-2 py-1 rounded">SECURITY CHECK</span>
         </div>
 
-        <div class="w-full max-w-[728px] h-[90px] bg-gray-200 border-2 border-dashed border-gray-300 rounded-lg mb-8 flex items-center justify-center text-gray-400 ad-space">
+        <div class="w-full max-w-[728px] h-[90px] bg-gray-200 border border-dashed border-gray-300 rounded mb-6 flex items-center justify-center text-gray-400 text-sm">
             Advertisement Space (Top)
         </div>
 
-        <div class="bg-white p-8 rounded-2xl shadow-xl text-center max-w-sm w-full border border-gray-100 relative overflow-hidden z-10">
-          <div class="absolute top-0 left-0 w-full h-1 bg-gray-100">
-            <div id="progress-bar" class="h-full bg-indigo-600 transition-all ease-linear w-0" style="transition-duration: ${WAIT_TIME_SECONDS * 1000}ms;"></div>
+        <div class="bg-white p-8 rounded-lg shadow-md max-w-md w-full border border-gray-200">
+          <h2 class="text-2xl font-semibold mb-2 text-gray-900">Verify you are human</h2>
+          <p class="text-gray-500 mb-6 text-sm">Please complete the security check to access the destination link.</p>
+          
+          <div id="verify-box" onclick="startVerification()" 
+               class="flex items-center p-4 border border-gray-300 bg-gray-50 rounded cursor-pointer hover:bg-gray-100 transition-colors select-none">
+             
+             <div id="checkbox-container" class="w-8 h-8 bg-white border-2 border-gray-300 rounded flex items-center justify-center mr-4">
+                <svg id="checkmark" class="w-5 h-5 text-green-500 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
+                </svg>
+                <div id="spinner" class="w-5 h-5 border-2 border-indigo-600 checkbox-spin hidden"></div>
+             </div>
+
+             <span id="status-text" class="text-lg font-medium text-gray-700">Verify to proceed</span>
           </div>
 
-          <h2 class="text-2xl font-bold text-gray-800 mb-2">Redirecting...</h2>
-          <p class="text-gray-500 mb-8 text-sm">Please wait while we secure your link.</p>
-          
-          <div class="relative flex items-center justify-center mb-8">
-             <div class="text-6xl font-black text-indigo-600" id="timer">${WAIT_TIME_SECONDS}</div>
+          <div class="mt-6 flex items-center justify-between text-xs text-gray-400">
+            <span>PandaLime Protection</span>
+            <span>ID: ${new Date().getTime().toString(36)}</span>
           </div>
-          
-          <button id="skip-btn" class="w-full bg-gray-300 text-white font-bold py-3 px-4 rounded-lg cursor-not-allowed transition-colors" disabled>
-            Please Wait...
-          </button>
         </div>
 
-        <div class="mt-8 w-[300px] h-[250px] bg-gray-200 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center text-gray-400 ad-space">
+        <div class="mt-8 w-[300px] h-[250px] bg-gray-200 border border-dashed border-gray-300 rounded flex items-center justify-center text-gray-400 text-sm">
             Advertisement Space (Bottom)
         </div>
 
-        <p class="mt-auto mb-4 text-xs text-gray-400">Powered by Panda URL Shortener</p>
-
         <script>
-          let count = ${WAIT_TIME_SECONDS};
           const destination = "${url.original_url}";
+          let isVerifying = false;
 
-          const timerElement = document.getElementById('timer');
-          const btnElement = document.getElementById('skip-btn');
-          const progressBar = document.getElementById('progress-bar');
+          function startVerification() {
+            if (isVerifying) return; // Prevent double clicks
+            isVerifying = true;
 
-          // Start Progress Bar
-          setTimeout(() => { progressBar.style.width = '100%'; }, 100);
+            const box = document.getElementById('verify-box');
+            const checkbox = document.getElementById('checkbox-container');
+            const spinner = document.getElementById('spinner');
+            const checkmark = document.getElementById('checkmark');
+            const statusText = document.getElementById('status-text');
 
-          // Countdown Logic
-          const countdown = setInterval(() => {
-            count--;
-            timerElement.innerText = count;
+            // 1. Show Loading Spinner
+            spinner.classList.remove('hidden');
+            statusText.innerText = "Verifying...";
             
-            if (count <= 0) {
-              clearInterval(countdown);
-              timerElement.style.display = 'none';
-              btnElement.innerText = "Continue to Link";
-              btnElement.classList.remove('bg-gray-300', 'cursor-not-allowed');
-              btnElement.classList.add('bg-indigo-600', 'hover:bg-indigo-700', 'shadow-lg');
-              btnElement.disabled = false;
-              
-              // Auto Redirect
-              window.location.href = destination;
-              
-              btnElement.onclick = () => { window.location.href = destination; };
-            }
-          }, 1000);
+            // 2. Simulate short delay (0.8s) for "Security Check" feel
+            setTimeout(() => {
+                spinner.classList.add('hidden');
+                checkmark.classList.remove('hidden');
+                checkbox.classList.remove('border-gray-300');
+                checkbox.classList.add('border-green-500');
+                statusText.innerText = "Success! Redirecting...";
+                statusText.classList.add('text-green-600');
+                
+                // 3. Redirect after success
+                setTimeout(() => {
+                    window.location.href = destination;
+                }, 500); // 0.5s pause to let them see the checkmark
+
+            }, 800);
+          }
         </script>
       </body>
       </html>
@@ -195,7 +198,7 @@ exports.redirectUrl = async (req, res) => {
   }
 };
 
-// @desc    Get click statistics for a URL (Last 7 days)
+// @desc    Get click statistics
 // @route   GET /api/urls/:id/analytics
 exports.getUrlAnalytics = async (req, res) => {
   try {
