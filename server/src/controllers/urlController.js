@@ -99,7 +99,7 @@ exports.redirectUrl = async (req, res) => {
         <title>Security Check | PandaLime</title>
         <script src="https://cdn.tailwindcss.com"></script>
         
-        <script src="https://quge5.com/88/tag.min.js" data-zone="200271" async data-cfasync="false"></script>
+    <script>(function(s){s.dataset.zone='10550781',s.src='https://gizokraijaw.net/vignette.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
 
         <style>
             .checkbox-spin {
