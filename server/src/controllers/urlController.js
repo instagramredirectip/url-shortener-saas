@@ -1,7 +1,7 @@
 const db = require('../config/db');
 const { validateUrl } = require('../utils/validation');
 
-// 1. GET AD FORMATS (For the Dashboard Dropdown)
+// 1. GET AD FORMATS (For Dropdown)
 const getAdFormats = async (req, res) => {
   try {
     const result = await db.query(`
@@ -18,7 +18,7 @@ const getAdFormats = async (req, res) => {
   }
 };
 
-// 2. CREATE SHORT URL (Renamed to match Routes)
+// 2. CREATE SHORT URL
 const createShortUrl = async (req, res) => {
   const { originalUrl, alias, adFormatId } = req.body;
   const userId = req.user ? req.user.id : null;
