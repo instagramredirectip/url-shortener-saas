@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import Payouts from './pages/Payouts';
 import AdminPanel from './pages/AdminPanel';
 import ProtectedRoute from './components/ProtectedRoute';
+import AdminRoute from './components/AdminRoute';
 
 function App() {
   return (
@@ -34,13 +35,12 @@ function App() {
           </ProtectedRoute>
         } />
 
-        {/* Admin Route */}
-        <Route path="/admin" element={
-          <ProtectedRoute>
-            <AdminPanel />
-          </ProtectedRoute>
-        } />
-
+        {/* Admin Route - Secured with AdminRoute */}
+<Route path="/admin" element={
+  <AdminRoute>
+    <AdminPanel />
+  </AdminRoute>
+} />
         {/* Catch all - Redirect to Home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
