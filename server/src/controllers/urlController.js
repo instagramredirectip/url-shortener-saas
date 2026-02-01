@@ -1,7 +1,7 @@
 const db = require('../config/db');
 const { validateUrl } = require('../utils/validation');
 
-// 1. GET AD FORMATS (Fixes Empty Dropdown)
+// 1. GET AD FORMATS (For the Dashboard Dropdown)
 const getAdFormats = async (req, res) => {
   try {
     const result = await db.query(`
@@ -18,7 +18,7 @@ const getAdFormats = async (req, res) => {
   }
 };
 
-// 2. CREATE SHORT URL
+// 2. CREATE SHORT URL (Renamed to match Routes)
 const createShortUrl = async (req, res) => {
   const { originalUrl, alias, adFormatId } = req.body;
   const userId = req.user ? req.user.id : null;
@@ -75,15 +75,13 @@ const getMyUrls = async (req, res) => {
   }
 };
 
-// 4. GET URL ANALYTICS (Fixes "Failed to load stats")
+// 4. GET URL ANALYTICS
 const getUrlAnalytics = async (req, res) => {
   const { id } = req.params;
   try {
-    // Verify ownership
     const urlCheck = await db.query('SELECT * FROM urls WHERE id = $1 AND user_id = $2', [id, req.user.id]);
     if (urlCheck.rows.length === 0) return res.status(404).json({ error: 'URL not found' });
 
-    // Get clicks per day (Simple Analytics)
     const result = await db.query(`
       SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as date, COUNT(*) as count
       FROM impressions
@@ -92,8 +90,6 @@ const getUrlAnalytics = async (req, res) => {
       ORDER BY date ASC
     `, [id]);
     
-    // If no impressions, maybe check raw click_count? 
-    // For now, let's return impressions.
     res.json(result.rows);
   } catch (err) {
     console.error(err);

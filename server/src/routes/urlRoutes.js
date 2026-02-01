@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+// Import the functions using the EXACT names exported above
 const { 
   createShortUrl, 
   getMyUrls, 
@@ -7,16 +8,15 @@ const {
   getAdFormats, 
   getUrlAnalytics 
 } = require('../controllers/urlController');
-const authMiddleware = require('../middleware/authMiddleware');
-const optionalAuth = require('../middleware/optionalAuth'); // or use authMiddleware if you don't have optional
+const { protect } = require('../middleware/authMiddleware');
 
-// Public/Open Routes
-router.get('/formats', getAdFormats); // <--- Populates Dropdown
+// Public Route (for dropdown)
+router.get('/formats', getAdFormats); 
 
 // Protected Routes
-router.post('/shorten', optionalAuth || authMiddleware, createShortUrl);
-router.get('/myurls', authMiddleware, getMyUrls);
-router.delete('/:id', authMiddleware, deleteUrl);
-router.get('/:id/analytics', authMiddleware, getUrlAnalytics); // <--- Fixes Stats
+router.post('/shorten', protect, createShortUrl); // <--- Matches 'createShortUrl'
+router.get('/myurls', protect, getMyUrls); // <--- Changed from '/mine' to '/myurls' to match frontend
+router.delete('/:id', protect, deleteUrl);
+router.get('/:id/analytics', protect, getUrlAnalytics);
 
 module.exports = router;
