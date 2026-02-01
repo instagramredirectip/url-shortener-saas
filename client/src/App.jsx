@@ -31,6 +31,8 @@ function App() {
           </ProtectedRoute>
         } />
 
+        <Route path="/admin" element={<AdminPanel />} />
+
       </Routes>
     </AuthProvider>
   );
