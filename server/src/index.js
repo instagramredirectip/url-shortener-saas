@@ -5,8 +5,16 @@ const db = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const urlRoutes = require('./routes/urlRoutes');
 
-const { redirectUrl } = require('./controllers/urlController');
+const { redirectUrl } = require('./controllers/redirectController');
 const app = express();
+
+// ... existing imports
+const payoutRoutes = require('./routes/payoutRoutes'); // <--- Import
+
+// ... existing app.use code
+app.use('/api/auth', authRoutes);
+app.use('/api/urls', urlRoutes);
+app.use('/api/payouts', payoutRoutes); // <--- Add this line
 
 // --- SECURITY CONFIGURATION (CORS) ---
 // This tells the backend: "It is okay to accept requests from these websites"
