@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 import { useNavigate, Link } from 'react-router-dom';
-import { BarChart2, Copy, ExternalLink, Trash2, Link as LinkIcon, Loader2, LogOut, Wand2, IndianRupee, Wallet } from 'lucide-react';
+import { BarChart2, Copy, ExternalLink, Trash2, Link as LinkIcon, Loader2, LogOut, IndianRupee, Wallet } from 'lucide-react';
 import AnalyticsCard from '../components/AnalyticsCard';
 
 const Dashboard = () => {
@@ -14,7 +14,7 @@ const Dashboard = () => {
   // Form State
   const [newUrl, setNewUrl] = useState('');
   const [customAlias, setCustomAlias] = useState('');
-  const [selectedAd, setSelectedAd] = useState(''); // Stores ID of selected ad
+  const [selectedAd, setSelectedAd] = useState('');
   const [creating, setCreating] = useState(false);
   
   // Analytics State
@@ -39,7 +39,6 @@ const Dashboard = () => {
       setAdFormats(adsRes.data);
       setUserStats(meRes.data);
       
-      // Default to "Highest Earnings" ad if available
       if (adsRes.data.length > 0) {
         setSelectedAd(adsRes.data[0].id);
       }
@@ -67,7 +66,7 @@ const Dashboard = () => {
       const { data } = await api.post('/urls/shorten', { 
         originalUrl: newUrl,
         alias: customAlias || undefined,
-        adFormatId: selectedAd || null // Send the selected ad format
+        adFormatId: selectedAd || null 
       });
       
       setUrls([data, ...urls]); 
@@ -119,16 +118,16 @@ const Dashboard = () => {
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       
-      {/* Navbar / Header */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4 bg-white p-5 rounded-xl shadow-sm border border-gray-100">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Dashboard</h1>
-          <p className="text-sm text-gray-500">Welcome back, earner.</p>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+          <p className="text-sm text-gray-500">Welcome back.</p>
         </div>
         <div className="flex items-center gap-3">
             <Link to="/payouts" className="flex items-center gap-2 bg-green-50 text-green-700 hover:bg-green-100 px-5 py-2.5 rounded-lg font-bold transition-colors">
                 <Wallet size={18} />
-                <span>Wallet: ₹{parseFloat(userStats.wallet_balance).toFixed(2)}</span>
+                <span>Wallet: ₹{parseFloat(userStats.wallet_balance || 0).toFixed(2)}</span>
             </Link>
             <button onClick={handleLogout} className="flex items-center gap-2 text-gray-500 hover:text-red-600 px-4 py-2 rounded-lg hover:bg-red-50 transition-colors font-medium">
                 <LogOut size={18} />
@@ -136,29 +135,8 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* STATS OVERVIEW */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-        <div className="bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-xl p-6 text-white shadow-lg shadow-indigo-200">
-            <p className="text-indigo-100 text-sm font-medium mb-1">Total Earnings</p>
-            <h3 className="text-3xl font-bold flex items-center gap-1">
-                <IndianRupee size={24} /> {userStats.total_earnings}
-            </h3>
-        </div>
-        <div className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm">
-             <p className="text-gray-400 text-sm font-medium mb-1">Active Links</p>
-             <h3 className="text-3xl font-bold text-gray-800">{urls.length}</h3>
-        </div>
-        <div className="bg-white rounded-xl p-6 border border-gray-100 shadow-sm">
-             <p className="text-gray-400 text-sm font-medium mb-1">Total Clicks</p>
-             <h3 className="text-3xl font-bold text-gray-800">
-                {urls.reduce((acc, curr) => acc + (curr.click_count || 0), 0)}
-             </h3>
-        </div>
-      </div>
-
       {/* CREATE LINK CARD */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-10 relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-1 h-full bg-primary"></div>
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-10">
         <h2 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
           <LinkIcon size={20} className="text-primary" />
           Create Monetized Link
@@ -167,7 +145,6 @@ const Dashboard = () => {
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col md:flex-row gap-4">
             
-            {/* Long URL */}
             <div className="flex-[2]">
                 <input
                 type="url"
@@ -179,7 +156,6 @@ const Dashboard = () => {
                 />
             </div>
             
-            {/* Alias */}
             <div className="flex-1">
                 <input
                     type="text"
@@ -191,7 +167,6 @@ const Dashboard = () => {
                 />
             </div>
 
-            {/* Ad Strategy Dropdown */}
             <div className="flex-1 min-w-[200px]">
                 <select 
                     value={selectedAd}
@@ -224,7 +199,12 @@ const Dashboard = () => {
 
         {urls.map((url) => {
           const code = url.short_code || url.shortCode || 'ERROR';
-          const fullLink = `https://pandalime.com/${code}`;
+          
+          // --- FIX IS HERE: Use go.pandalime.com ---
+          const shortUrlDisplay = `go.pandalime.com/${code}`;
+          const fullLink = `https://${shortUrlDisplay}`;
+          // -----------------------------------------
+
           const isMonetized = url.is_monetized;
 
           return (
@@ -234,7 +214,7 @@ const Dashboard = () => {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 mb-1">
                     <a href={fullLink} target="_blank" rel="noopener noreferrer" className="text-lg font-bold text-primary hover:underline truncate">
-                      pandalime.com/{code}
+                      {shortUrlDisplay}
                     </a>
                     {isMonetized && (
                         <span className="bg-green-100 text-green-700 text-[10px] uppercase px-2 py-0.5 rounded-full font-bold tracking-wide">

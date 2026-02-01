@@ -6,16 +6,17 @@ const authRoutes = require('./routes/authRoutes');
 const urlRoutes = require('./routes/urlRoutes');
 const payoutRoutes = require('./routes/payoutRoutes');
 
-// --- FIX IS HERE: Import from 'redirectController', not 'urlController' ---
+// Import from redirectController (Handles the intermediate page)
 const { redirectUrl } = require('./controllers/redirectController'); 
 
 const app = express();
 
 // --- SECURITY CONFIGURATION (CORS) ---
 const allowedOrigins = [
-  'https://pandalime.com',
-  'https://www.pandalime.com',
-  'http://localhost:5173',
+  'https://pandalime.com',       // Dashboard (Frontend)
+  'https://www.pandalime.com',   // Dashboard (www)
+  'https://go.pandalime.com',    // Short Link Domain (Backend)
+  'http://localhost:5173',       // Local Dev
   'http://localhost:3000'
 ];
 
@@ -40,18 +41,15 @@ app.use('/api/auth', authRoutes);
 app.use('/api/urls', urlRoutes);
 app.use('/api/payouts', payoutRoutes);
 
-// Redirect Endpoint (Must be last)
-// Now 'redirectUrl' will be a valid function, so this won't crash
+// Redirect Endpoint (Captures go.pandalime.com/xyz)
 app.get('/:code', redirectUrl);
 
 // Health Check
 app.get('/', (req, res) => {
-  res.send('Panda URL Shortener API is running...');
+  res.send('PandaLime API (go.pandalime.com) is running...');
 });
 
-// --- START SERVER ---
 const PORT = process.env.PORT || 5000;
-
 app.listen(PORT, () => {
   console.log(`[Server] Running on port ${PORT}`);
 });

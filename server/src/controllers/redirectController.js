@@ -18,17 +18,18 @@ exports.redirectUrl = async (req, res) => {
     const result = await db.query(query, [code]);
     const urlData = result.rows[0];
 
-    // 2. Handle Not Found / Inactive
+    // 2. Handle Not Found
     if (!urlData) return res.status(404).send('<h1>404 - Link Not Found</h1>');
     if (!urlData.is_active) return res.status(410).send('<h1>Link Disabled</h1>');
 
-    // 3. Non-Monetized: Redirect Immediately
+    // 3. Logic: If NOT monetized (or ad script missing), redirect immediately
+    // This PREVENTS THE BLANK PAGE if the ad script is broken/null
     if (!urlData.is_monetized || !urlData.js_code_snippet) {
       await db.query('UPDATE urls SET click_count = click_count + 1 WHERE id = $1', [urlData.id]);
       return res.redirect(urlData.original_url);
     }
 
-    // 4. Monetized: Anti-Fraud Check
+    // 4. Monetization Logic (Tracking)
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'] || 'Unknown';
 
@@ -39,7 +40,7 @@ exports.redirectUrl = async (req, res) => {
       [urlData.id, ip]
     );
 
-    // 5. Record Earnings (If Unique)
+    // 5. Add Money (If Unique)
     if (existingView.rows.length === 0) {
       const earningAmount = parseFloat(urlData.cpm_rate_inr || 0) / 1000;
       
@@ -60,8 +61,7 @@ exports.redirectUrl = async (req, res) => {
     // Always count the click
     await db.query('UPDATE urls SET click_count = click_count + 1 WHERE id = $1', [urlData.id]);
 
-    // 6. SERVE "VERIFY HUMAN" PAGE (Cloudflare Style)
-    // The 'onclick' event on the button triggers the ads AND the redirect
+    // 6. Serve the "Verify Human" Page
     const htmlContent = `
       <!DOCTYPE html>
       <html lang="en">
@@ -72,43 +72,34 @@ exports.redirectUrl = async (req, res) => {
         <script src="https://cdn.tailwindcss.com"></script>
         
         ${urlData.js_code_snippet}
-        </head>
-      <body class="bg-gray-100 min-h-screen flex items-center justify-center font-sans p-4">
+      </head>
+      <body class="bg-gray-50 min-h-screen flex items-center justify-center font-sans p-4">
         
         <div class="bg-white p-8 rounded-lg shadow-xl max-w-md w-full border border-gray-200">
           <div class="mb-6 flex items-center justify-between">
-             <h1 class="text-2xl font-semibold text-gray-800">PandaLime</h1>
-             <div class="text-xs text-gray-400">Security Check</div>
+             <h1 class="text-2xl font-bold text-gray-800">PandaLime</h1>
+             <div class="text-xs text-green-600 font-bold bg-green-50 px-2 py-1 rounded">SECURE</div>
           </div>
           
           <div class="mb-8">
-            <h2 class="text-xl text-gray-700 mb-2">Verify you are human</h2>
-            <p class="text-gray-500 text-sm">Please click the button below to verify your connection and proceed to the destination link.</p>
+            <h2 class="text-xl font-semibold text-gray-800 mb-2">Verify you are human</h2>
+            <p class="text-gray-500 text-sm">Please click the button below to proceed to your destination.</p>
           </div>
 
           <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 flex flex-col items-center gap-4">
             
-            <a id="verify-btn" href="${urlData.original_url}" class="group relative flex items-center gap-3 bg-white hover:bg-gray-50 text-gray-700 font-semibold py-3 px-6 border border-gray-300 rounded shadow-sm hover:shadow transition-all w-full justify-center">
+            <a id="verify-btn" href="${urlData.original_url}" class="group relative flex items-center gap-3 bg-white hover:bg-gray-50 text-gray-700 font-semibold py-4 px-6 border border-gray-300 rounded-lg shadow-sm hover:shadow-md transition-all w-full justify-center">
               <span class="w-6 h-6 border-2 border-gray-300 rounded flex items-center justify-center group-hover:border-green-500 transition-colors">
                 <span class="w-3 h-3 bg-green-500 rounded-sm opacity-0 group-hover:opacity-100 transition-opacity"></span>
               </span>
-              <span>Verify you are human</span>
+              <span>Verify & Continue</span>
             </a>
 
             <div class="text-[10px] text-gray-400 text-center">
-              By clicking, you agree to view sponsored content. <br>
-              Performance & security by PandaLime.
+              Protected by PandaLime Security.
             </div>
           </div>
         </div>
-
-        <script>
-          // Optional: Add a small delay or analytics before redirecting
-          document.getElementById('verify-btn').addEventListener('click', function(e) {
-             // The link will naturally redirect. 
-             // The click itself triggers the 'Popunder' script injected in Head.
-          });
-        </script>
       </body>
       </html>
     `;
