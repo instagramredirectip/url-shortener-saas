@@ -1,9 +1,9 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
-const requestIp = require('request-ip'); // Import this
+const requestIp = require('request-ip'); 
 
-// Helper: Generate Token with Safety Check
+// ... (Your existing generateToken function) ...
 const generateToken = (id) => {
   if (!process.env.JWT_SECRET) {
     throw new Error('FATAL ERROR: JWT_SECRET is missing in environment variables!');
@@ -11,105 +11,57 @@ const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
 };
 
-// 1. REGISTER
+// ... (Your existing registerUser function) ...
 const registerUser = async (req, res) => {
-  const { email, password } = req.body;
-  console.log(`[Register] Attempting for: ${email}`);
-
-  try {
-    // Check DB Connection
-    if (!db) throw new Error('Database connection object is undefined');
-
-    const userExists = await db.query('SELECT * FROM users WHERE email = $1', [email]);
-    if (userExists.rows.length > 0) return res.status(400).json({ error: 'User already exists' });
-
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // FIX: Changed 'password' to 'password_hash' to match your DB schema
-    const newUser = await db.query(
-      'INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id, email, role, wallet_balance',
-      [email, hashedPassword, 'user']
-    );
-
-    const user = newUser.rows[0];
-    res.status(201).json({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      wallet_balance: user.wallet_balance || 0,
-      token: generateToken(user.id),
-    });
-  } catch (err) {
-    console.error('[Register Error]:', err.message);
-    res.status(500).json({ error: `Server error: ${err.message}` });
-  }
+    // ... keep existing code ...
 };
 
-// 2. LOGIN
+// ... (Your existing loginUser function) ...
 const loginUser = async (req, res) => {
-  const { email, password } = req.body;
-  console.log(`[Login] Attempting login for: ${email}`);
-
-  try {
-    const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
-    
-    if (result.rows.length === 0) {
-      console.log('[Login] User not found');
-      return res.status(400).json({ error: 'Invalid credentials' });
-    }
-
-    const user = result.rows[0];
-    
-    // FIX: Access 'password_hash' from the DB result, not 'password'
-    if (!user.password_hash || !user.password_hash.startsWith('$2')) {
-      console.error('[Login] CRITICAL: Stored password is NOT a valid bcrypt hash!');
-      return res.status(500).json({ error: 'Account data corrupted' });
-    }
-
-    // FIX: Compare against 'password_hash'
-    const isMatch = await bcrypt.compare(password, user.password_hash);
-    if (!isMatch) {
-      console.log('[Login] Password incorrect');
-      return res.status(400).json({ error: 'Invalid credentials' });
-    }
-
-    // --- SECURITY UPGRADE: Save Login IP (Prevent Self-Clicking) ---
-    // This allows redirectController to verify if the visitor IP matches the owner IP
-    const clientIp = requestIp.getClientIp(req);
-    await db.query('UPDATE users SET last_login_ip = $1 WHERE id = $2', [clientIp, user.id]);
-    console.log(`[Login] IP tracked: ${clientIp} for user ${user.id}`);
-    // ---------------------------------------------------------------
-
-    const token = generateToken(user.id);
-    console.log('[Login] Token generated successfully');
-
-    res.json({
-      id: user.id,
-      email: user.email,
-      role: user.role || 'user', 
-      wallet_balance: user.wallet_balance || 0,
-      token: token,
-    });
-
-  } catch (err) {
-    console.error('[Login Crash]:', err.message);
-    res.status(500).json({ error: `Login failed: ${err.message}` });
-  }
+    // ... keep existing code ...
 };
 
-// 3. GET ME
+// ... (Your existing getMe function) ...
 const getMe = async (req, res) => {
   try {
-    res.json(req.user);
+    const user = await db.query('SELECT id, email, role, wallet_balance, upi_id, payment_method FROM users WHERE id = $1', [req.user.id]);
+    res.json(user.rows[0]);
   } catch (err) {
     console.error('[GetMe Error]:', err);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
+// [NEW FUNCTION] UPDATE PAYMENT DETAILS
+const updatePaymentDetails = async (req, res) => {
+  try {
+    const { upiId, paymentMethod } = req.body;
+    const userId = req.user.id;
+
+    if (!upiId) {
+      return res.status(400).json({ error: 'UPI ID is required' });
+    }
+
+    // Update the user's payment info in the database
+    const result = await db.query(
+      'UPDATE users SET upi_id = $1, payment_method = $2 WHERE id = $3 RETURNING id, email, upi_id, payment_method',
+      [upiId, paymentMethod || 'UPI', userId]
+    );
+
+    res.json({
+      message: 'Payment details updated successfully',
+      user: result.rows[0]
+    });
+
+  } catch (err) {
+    console.error('[Payment Update Error]:', err.message);
+    res.status(500).json({ error: 'Server error updating payment details' });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
-  getMe
+  getMe,
+  updatePaymentDetails // <--- DON'T FORGET TO EXPORT THIS
 };

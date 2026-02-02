@@ -1,13 +1,14 @@
 const express = require('express');
 const router = express.Router();
-// Import controller functions
-const { registerUser, loginUser, getMe } = require('../controllers/authController');
-// Import middleware
+// Import the new function
+const { registerUser, loginUser, getMe, updatePaymentDetails } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 
-// Define Routes
-router.post('/register', registerUser); // This was likely where it crashed before
+router.post('/register', registerUser);
 router.post('/login', loginUser);
 router.get('/me', protect, getMe);
+
+// [NEW ROUTE] This fixes the 404 Error
+router.put('/payment-details', protect, updatePaymentDetails); 
 
 module.exports = router;
