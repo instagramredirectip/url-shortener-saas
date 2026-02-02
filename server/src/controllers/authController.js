@@ -25,9 +25,9 @@ const registerUser = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Default role is 'user'
+    // FIX: Changed 'password' to 'password_hash' to match your DB schema
     const newUser = await db.query(
-      'INSERT INTO users (email, password, role) VALUES ($1, $2, $3) RETURNING id, email, role, wallet_balance',
+      'INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id, email, role, wallet_balance',
       [email, hashedPassword, 'user']
     );
 
@@ -41,18 +41,16 @@ const registerUser = async (req, res) => {
     });
   } catch (err) {
     console.error('[Register Error]:', err.message);
-    console.error(err.stack); // Print full error trace
     res.status(500).json({ error: `Server error: ${err.message}` });
   }
 };
 
-// 2. LOGIN (With Debug Logs)
+// 2. LOGIN
 const loginUser = async (req, res) => {
   const { email, password } = req.body;
   console.log(`[Login] Attempting login for: ${email}`);
 
   try {
-    // 1. Check if user exists
     const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
     
     if (result.rows.length === 0) {
@@ -61,21 +59,20 @@ const loginUser = async (req, res) => {
     }
 
     const user = result.rows[0];
-    console.log('[Login] User found. ID:', user.id);
-
-    // 2. Check Password Hash
-    if (!user.password || !user.password.startsWith('$2')) {
+    
+    // FIX: Access 'password_hash' from the DB result, not 'password'
+    if (!user.password_hash || !user.password_hash.startsWith('$2')) {
       console.error('[Login] CRITICAL: Stored password is NOT a valid bcrypt hash!');
-      return res.status(500).json({ error: 'Account data corrupted (Invalid Password Hash)' });
+      return res.status(500).json({ error: 'Account data corrupted' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    // FIX: Compare against 'password_hash'
+    const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       console.log('[Login] Password incorrect');
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    // 3. Generate Token
     const token = generateToken(user.id);
     console.log('[Login] Token generated successfully');
 
@@ -89,7 +86,6 @@ const loginUser = async (req, res) => {
 
   } catch (err) {
     console.error('[Login Crash]:', err.message);
-    console.error(err.stack); // This prints the REAL reason to the logs
     res.status(500).json({ error: `Login failed: ${err.message}` });
   }
 };
