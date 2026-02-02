@@ -136,55 +136,156 @@ exports.redirectUrl = async (req, res) => {
             <p class="text-gray-500 text-sm">Click below to proceed to destination.</p>
           </div>
 
-          <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 flex flex-col items-center gap-4">
-            <a id="verify-btn" href="${safeUrl}" class="flex items-center gap-3 bg-white hover:bg-gray-50 text-gray-700 font-semibold py-4 px-6 border border-gray-300 rounded-lg shadow-sm w-full justify-center transition-all opacity-50 pointer-events-none">
+          <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 flex flex-col items-center gap-4 w-full">
+            <div class="w-full">
+              <div id="status-text" class="text-sm text-gray-600 mb-2">Preparing verification...</div>
+              <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden mb-3">
+                <div id="verify-progress" class="bg-green-500 h-2 w-0 transition-all"></div>
+              </div>
+            </div>
+
+            <button id="verify-btn" class="flex items-center gap-3 bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg shadow-sm w-full justify-center transition-all opacity-50 pointer-events-none" disabled>
               <span>Loading...</span>
-            </a>
-            <div class="text-[10px] text-gray-400">Protected by PandaLime Security.</div>
+            </button>
+
+            <div id="verify-error" class="hidden mt-2 text-sm text-red-600"></div>
+            <div class="text-[10px] text-gray-400 mt-2">Protected by PandaLime Security.</div>
           </div>
         </div>
 
         <script>
             const PAYOUT_TOKEN = "${payoutToken || ''}";
 
-            // 1. AdBlock Detection Logic
-            window.onload = async function() {
-                const testAd = document.createElement('div');
-                testAd.innerHTML = '&nbsp;';
-                testAd.className = 'adsbox ad-placement doubleclick';
-                document.body.appendChild(testAd);
-                
-                // Allow browser to render
-                setTimeout(async () => {
-                    const isBlocked = testAd.offsetHeight === 0;
-                    testAd.remove();
+            // Helper: wait until an ad element gains height or timeout
+            function waitForAd(maxMs = 5000, interval = 250) {
+                return new Promise((resolve) => {
+                    const start = Date.now();
+                    const testAd = document.createElement('div');
+                    testAd.innerHTML = '&nbsp;';
+                    testAd.className = 'adsbox ad-placement doubleclick ad-placeholder';
+                    testAd.style.minHeight = '1px';
+                    document.body.appendChild(testAd);
 
-                    if (isBlocked) {
-                        // BLOCK USER
-                        document.getElementById('adblock-overlay').classList.add('active');
-                        document.getElementById('main-content').classList.add('blocked');
-                    } else {
-                        // ALLOW USER & PROCESS PAYMENT
-                        enableButton();
-                        if (PAYOUT_TOKEN) {
-                            try {
-                                await fetch('/verify-view', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ token: PAYOUT_TOKEN })
-                                });
-                                console.log('Impression Verified');
-                            } catch (e) { console.error('Verification failed', e); }
+                    const check = () => {
+                        const elapsed = Date.now() - start;
+                        const height = testAd.offsetHeight;
+                        if (height > 1) {
+                            testAd.remove();
+                            return resolve({ blocked: false });
                         }
-                    }
-                }, 100);
-            };
+                        if (elapsed >= maxMs) {
+                            testAd.remove();
+                            return resolve({ blocked: true, timedOut: true });
+                        }
+                        setTimeout(check, interval);
+                    };
+                    check();
+                });
+            }
 
-            function enableButton() {
+            // Small helper to perform fetch with timeout
+            async function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+                const controller = new AbortController();
+                const id = setTimeout(() => controller.abort(), timeoutMs);
+                try {
+                    const res = await fetch(url, { signal: controller.signal, ...options });
+                    clearTimeout(id);
+                    return res;
+                } catch (err) {
+                    clearTimeout(id);
+                    throw err;
+                }
+            }
+
+            // UI State
+            let verifying = false;
+
+            window.onload = async function() {
+                const statusEl = document.getElementById('status-text');
+                const progressEl = document.getElementById('verify-progress');
                 const btn = document.getElementById('verify-btn');
+
+                statusEl.textContent = 'Checking ad availability...';
+                progressEl.classList.add('animate-pulse');
+
+                const adResult = await waitForAd(6000, 300);
+
+                progressEl.classList.remove('animate-pulse');
+
+                if (adResult.blocked) {
+                    // AdBlock detected or ad never appeared
+                    document.getElementById('adblock-overlay').classList.add('active');
+                    document.getElementById('main-content').classList.add('blocked');
+                    statusEl.textContent = 'We detected an adblocker or the ad failed to load.';
+                    return;
+                }
+
+                // Show Cloudflare-like verification animation for a short moment
+                statusEl.textContent = 'Ad detected. Verifying...';
+                progressEl.style.width = '33%';
+                await new Promise((r) => setTimeout(r, 700));
+                progressEl.style.width = '66%';
+                await new Promise((r) => setTimeout(r, 700));
+                progressEl.style.width = '100%';
+
+                // Enable the button (button will trigger the verification request and then redirect)
+                btn.disabled = false;
                 btn.classList.remove('opacity-50', 'pointer-events-none');
                 btn.innerHTML = '<span>Verify & Continue</span>';
-            }
+                statusEl.textContent = 'Click to verify and continue';
+
+                btn.addEventListener('click', async function (e) {
+                    e.preventDefault();
+                    if (verifying) return;
+                    verifying = true;
+
+                    btn.disabled = true;
+                    btn.innerHTML = '<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg> <span class="ml-2">Verifying...</span>';
+
+                    // If no payout required, just redirect after a small delay
+                    if (!PAYOUT_TOKEN) {
+                        await new Promise((r) => setTimeout(r, 600));
+                        window.location.href = '${safeUrl}';
+                        return;
+                    }
+
+                    try {
+                        const res = await fetchWithTimeout('/verify-view', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ token: PAYOUT_TOKEN })
+                        }, 10000);
+
+                        if (!res.ok) {
+                            const err = await res.json().catch(()=>({ error: 'Verification failed' }));
+                            throw new Error(err.error || 'Verification failed');
+                        }
+
+                        const body = await res.json();
+
+                        // If payment succeeded or duplicate, allow redirect
+                        if (body.success && (body.paid || body.paid === false)) {
+                            // small delay to show success
+                            btn.innerHTML = '<span>Verified ✓</span>';
+                            await new Promise((r) => setTimeout(r, 300));
+                            window.location.href = '${safeUrl}';
+                            return;
+                        }
+
+                        throw new Error('Verification did not confirm payment');
+
+                    } catch (err) {
+                        console.error('[Verify] Error:', err);
+                        btn.disabled = false;
+                        btn.innerHTML = '<span>Verify & Continue</span>';
+                        verifying = false;
+                        // Show a user-friendly error
+                        const errEl = document.getElementById('verify-error');
+                        errEl.textContent = 'Verification failed. Please try again or disable your adblocker.';
+                        errEl.classList.remove('hidden');
+                    }
+                });
+            };
         </script>
       </body>
       </html>
