@@ -6,8 +6,8 @@ const authRoutes = require('./routes/authRoutes');
 const urlRoutes = require('./routes/urlRoutes');
 const payoutRoutes = require('./routes/payoutRoutes');
 
-// Import from redirectController (Handles the intermediate page)
-const { redirectUrl } = require('./controllers/redirectController'); 
+// Import redirect routes (handles intermediate page + verification)
+const redirectRoutes = require('./routes/redirectRoutes');
 
 const app = express();
 
@@ -41,8 +41,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/urls', urlRoutes);
 app.use('/api/payouts', payoutRoutes);
 
-// Redirect Endpoint (Captures go.pandalime.com/xyz)
-app.get('/:code', redirectUrl);
+// Redirect & verification routes (captures go.pandalime.com/:code and /verify-view)
+app.use('/', redirectRoutes);
 
 // Health Check
 app.get('/', (req, res) => {

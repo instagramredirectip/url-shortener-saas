@@ -88,13 +88,17 @@ END $$;
 CREATE TABLE IF NOT EXISTS payout_requests (
     id SERIAL PRIMARY KEY,
     user_id INT REFERENCES users(id) ON DELETE CASCADE,
-    amount DECIMAL(12, 2) NOT NULL,
+    amount DECIMAL(12, 2) NOT NULL, -- net amount user will receive after commission
     status payout_status DEFAULT 'pending',
     requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     processed_at TIMESTAMP,
     processed_by INT REFERENCES users(id),
     admin_note TEXT
 );
+
+-- Track gross and commission values too
+ALTER TABLE payout_requests ADD COLUMN IF NOT EXISTS gross_amount DECIMAL(12,2) DEFAULT 0.00;
+ALTER TABLE payout_requests ADD COLUMN IF NOT EXISTS commission_amount DECIMAL(12,2) DEFAULT 0.00;
 
 -- Insert default ad formats if they don't exist
 INSERT INTO ad_formats (name, display_name, description, js_code_snippet, is_active)

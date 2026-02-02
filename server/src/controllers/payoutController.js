@@ -12,20 +12,25 @@ exports.requestPayout = async (req, res) => {
       return res.status(400).json({ error: 'Minimum withdrawal amount is ₹700' });
     }
 
+    // Compute commission: 30% platform fee on gross balance
+    const GROSS = parseFloat(balance.toFixed(2));
+    const COMMISSION = parseFloat((GROSS * 0.30).toFixed(2));
+    const NET = parseFloat((GROSS - COMMISSION).toFixed(2));
+
     // 2. Start Transaction
     await db.query('BEGIN');
 
-    // Deduct Balance
-    await db.query('UPDATE users SET wallet_balance = wallet_balance - $1 WHERE id = $2', [balance, userId]);
+    // Deduct full gross balance from user wallet
+    await db.query('UPDATE users SET wallet_balance = wallet_balance - $1 WHERE id = $2', [GROSS, userId]);
 
-    // Create Request
+    // Create Request storing net amount as `amount` for what user will receive, and record gross/commission
     await db.query(
-      'INSERT INTO payout_requests (user_id, amount, status) VALUES ($1, $2, $3)',
-      [userId, balance, 'pending']
+      'INSERT INTO payout_requests (user_id, amount, gross_amount, commission_amount, status) VALUES ($1, $2, $3, $4, $5)',
+      [userId, NET, GROSS, COMMISSION, 'pending']
     );
 
     await db.query('COMMIT');
-    res.json({ message: 'Payout requested successfully!' });
+    res.json({ message: 'Payout requested successfully!', requested: { gross: GROSS, commission: COMMISSION, net: NET } });
 
   } catch (err) {
     await db.query('ROLLBACK');
