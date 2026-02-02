@@ -1,27 +1,30 @@
 import { useState } from 'react';
-import api from '../services/api';
 import { useNavigate, Link } from 'react-router-dom';
-import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext'; // <--- IMPORT THIS
 import { Loader2, Mail, Lock, ArrowRight, TrendingUp, ShieldCheck } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  
+  // Get the login function from Context
+  const { login } = useAuth(); 
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    try {
-      const { data } = await api.post('/auth/login', formData);
-      localStorage.setItem('token', data.token);
-      toast.success('Welcome back!');
+
+    // Use the Context function (Handles State + Token + Headers automatically)
+    const success = await login(formData.email, formData.password);
+
+    if (success) {
+      // Navigate ONLY after state is updated
       navigate('/dashboard');
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Login failed');
-    } finally {
+    } else {
       setLoading(false);
     }
   };
@@ -32,7 +35,6 @@ const Login = () => {
       {/* LEFT SIDE: FORM */}
       <div className="w-full lg:w-1/2 flex flex-col justify-center px-8 sm:px-12 lg:px-24 py-12">
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
-          {/* Logo */}
           <Link to="/" className="flex items-center gap-2 mb-8 group w-fit">
              <div className="bg-slate-900 text-white p-2 rounded-lg group-hover:bg-green-600 transition-colors">
                 <ShieldCheck size={24} />
@@ -51,7 +53,6 @@ const Login = () => {
         <div className="mt-10 sm:mx-auto sm:w-full sm:max-w-md">
           <form className="space-y-6" onSubmit={handleSubmit}>
             
-            {/* Email Input */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Email address</label>
               <div className="relative">
@@ -69,7 +70,6 @@ const Login = () => {
               </div>
             </div>
 
-            {/* Password Input */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-sm font-medium text-slate-700">Password</label>
@@ -108,14 +108,12 @@ const Login = () => {
         </div>
       </div>
 
-      {/* RIGHT SIDE: VISUALS (Hidden on mobile) */}
+      {/* RIGHT SIDE: VISUALS */}
       <div className="hidden lg:flex w-1/2 bg-slate-900 relative overflow-hidden flex-col justify-between p-12 text-white">
-        {/* Abstract Glow */}
         <div className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-green-500 rounded-full blur-[100px] opacity-20"></div>
         <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-blue-500 rounded-full blur-[100px] opacity-20"></div>
 
         <div className="relative z-10 mt-auto mb-auto">
-          {/* Mockup Card */}
           <div className="bg-white/10 backdrop-blur-lg border border-white/10 p-6 rounded-2xl max-w-sm mx-auto shadow-2xl transform rotate-3 hover:rotate-0 transition-transform duration-500">
              <div className="flex items-center gap-3 mb-4 border-b border-white/10 pb-4">
                 <div className="bg-green-500 p-2 rounded-lg">

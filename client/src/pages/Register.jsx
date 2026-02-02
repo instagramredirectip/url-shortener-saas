@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import api from '../services/api';
 import { useNavigate, Link } from 'react-router-dom';
-import toast from 'react-hot-toast';
+import { useAuth } from '../context/AuthContext'; // <--- IMPORT THIS
 import { Loader2, Mail, Lock, CheckCircle2, Zap, ShieldCheck } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const Register = () => {
   const [formData, setFormData] = useState({ 
@@ -13,6 +13,9 @@ const Register = () => {
   
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  
+  // Get register function from Context
+  const { register } = useAuth();
 
   const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
@@ -23,15 +26,13 @@ const Register = () => {
     }
 
     setLoading(true);
-    try {
-      const payload = { email: formData.email, password: formData.password };
-      const { data } = await api.post('/auth/register', payload);
-      localStorage.setItem('token', data.token);
-      toast.success('Account created!');
+    
+    // Use Context function
+    const success = await register(formData.email, formData.password);
+    
+    if (success) {
       navigate('/dashboard');
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Registration failed');
-    } finally {
+    } else {
       setLoading(false);
     }
   };
@@ -132,9 +133,8 @@ const Register = () => {
         </div>
       </div>
 
-      {/* RIGHT SIDE: FEATURES (Hidden on mobile) */}
+      {/* RIGHT SIDE: FEATURES */}
       <div className="hidden lg:flex w-1/2 bg-slate-900 relative overflow-hidden flex-col justify-center p-12 text-white">
-        {/* Background Pattern */}
         <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '40px 40px' }}></div>
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-green-600 rounded-full blur-[120px] opacity-20"></div>
 
