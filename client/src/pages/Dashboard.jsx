@@ -9,13 +9,13 @@ import {
 } from 'recharts';
 import { 
   Wallet, TrendingUp, Link as LinkIcon, Copy, ExternalLink, 
-  Plus, ArrowUpRight, ShieldCheck, Loader2, Zap, Settings
+  Plus, ArrowUpRight, ShieldCheck, Loader2, Zap, Settings, RefreshCw
 } from 'lucide-react';
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
-  const [urls, setUrls] = useState([]);
-  const [adFormats, setAdFormats] = useState([]);
+  const [urls, setUrls] = useState([]); // Default empty array
+  const [adFormats, setAdFormats] = useState([]); // Default empty array
   const [selectedFormat, setSelectedFormat] = useState('');
   const [loading, setLoading] = useState(true);
   
@@ -26,7 +26,7 @@ const Dashboard = () => {
   // Stats
   const [stats, setStats] = useState({ totalClicks: 0, todayEarnings: 0 });
 
-  // Fake chart data (replace with real analytics endpoint later)
+  // Fake chart data
   const chartData = [
     { name: 'Mon', earnings: 120 },
     { name: 'Tue', earnings: 240 },
@@ -38,33 +38,49 @@ const Dashboard = () => {
   ];
 
   useEffect(() => {
-    fetchDashboardData();
-    fetchAdFormats();
+    loadData();
   }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    await Promise.all([fetchDashboardData(), fetchAdFormats()]);
+    setLoading(false);
+  };
 
   const fetchDashboardData = async () => {
     try {
-      // FIX 1: Corrected Endpoint from '/my-urls' to '/myurls'
       const { data } = await api.get('/urls/myurls');
-      setUrls(data);
       
-      const clicks = data.reduce((acc, curr) => acc + parseInt(curr.click_count || 0), 0);
-      setStats({ 
-        totalClicks: clicks, 
-        todayEarnings: (clicks * 0.25).toFixed(2) 
-      });
+      // CRASH PROOF CHECK: Ensure data is actually an array
+      if (Array.isArray(data)) {
+        setUrls(data);
+        const clicks = data.reduce((acc, curr) => acc + parseInt(curr.click_count || 0), 0);
+        setStats({ 
+          totalClicks: clicks, 
+          todayEarnings: (clicks * 0.25).toFixed(2) 
+        });
+      } else {
+        console.error("API did not return a list of URLs:", data);
+        setUrls([]); // Fallback to empty list
+      }
     } catch (err) {
       console.error("Error loading dashboard:", err);
-    } finally {
-      setLoading(false);
+      setUrls([]);
     }
   };
 
   const fetchAdFormats = async () => {
     try {
       const { data } = await api.get('/urls/formats');
-      setAdFormats(data);
-      if (data.length > 0) setSelectedFormat(data[0].id); // Select first by default
+      
+      // CRASH PROOF CHECK: Ensure data is an array
+      if (Array.isArray(data) && data.length > 0) {
+        setAdFormats(data);
+        setSelectedFormat(data[0].id);
+      } else {
+        console.warn("No ad formats found or API error");
+        setAdFormats([]);
+      }
     } catch (err) {
       console.error("Error loading formats:", err);
     }
@@ -75,17 +91,16 @@ const Dashboard = () => {
     if (!newUrl) return;
     setCreating(true);
     try {
-      // FIX 2: Send adFormatId in the request
       const payload = { 
         originalUrl: newUrl,
-        adFormatId: selectedFormat
+        adFormatId: selectedFormat || null // Send null if empty
       };
       
       const { data } = await api.post('/urls/shorten', payload);
       
       toast.success('Link Shortened!');
-      setUrls([data, ...urls]); // Add to top of list
-      setNewUrl(''); // Clear input
+      setUrls([data, ...urls]); 
+      setNewUrl(''); 
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to create link');
     } finally {
@@ -184,7 +199,7 @@ const Dashboard = () => {
             </div>
           </motion.div>
 
-          {/* CREATE LINK CARD (Updated) */}
+          {/* CREATE LINK CARD */}
           <motion.div 
              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
              className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 rounded-2xl shadow-lg text-white"
@@ -213,7 +228,7 @@ const Dashboard = () => {
                         <option key={fmt.id} value={fmt.id}>{fmt.name} - ₹{fmt.cpm_rate}/1k</option>
                       ))
                    ) : (
-                      <option value="">Loading formats...</option>
+                      <option value="">{adFormats.length === 0 ? "Loading Formats..." : "No formats available"}</option>
                    )}
                 </select>
 
@@ -255,7 +270,7 @@ const Dashboard = () => {
               </ResponsiveContainer>
             </div>
 
-            {/* Links List (Fixed Refresh Issue) */}
+            {/* Links List */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                 <h3 className="font-bold text-lg text-slate-800">Your Links</h3>
