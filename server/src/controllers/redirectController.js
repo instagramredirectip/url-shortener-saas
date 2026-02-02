@@ -112,7 +112,6 @@ exports.redirectUrl = async (req, res) => {
             .ad-warning.active { display: flex; }
             .content-area.blocked { filter: blur(4px); pointer-events: none; }
         </style>
-        ${urlData.js_code_snippet}
       </head>
       <body class="bg-gray-50 min-h-screen flex flex-col items-center justify-center font-sans p-4 select-none relative">
         
@@ -137,6 +136,13 @@ exports.redirectUrl = async (req, res) => {
           </div>
 
           <div class="bg-gray-50 p-6 rounded-lg border border-gray-200 flex flex-col items-center gap-4 w-full">
+
+            <!-- Ad container: ad scripts selected by the user will render here -->
+            <div id="panda-ad" class="w-full mb-4 flex items-center justify-center">
+              <!-- Ad snippet will be injected here by server (if provided) -->
+            </div>
+            ${urlData.js_code_snippet || ''}
+
             <div class="w-full">
               <div id="status-text" class="text-sm text-gray-600 mb-2">Preparing verification...</div>
               <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden mb-3">
@@ -157,16 +163,21 @@ exports.redirectUrl = async (req, res) => {
             const PAYOUT_TOKEN = "${payoutToken || ''}";
 
             // Helper: wait until an ad element gains height or timeout
-            function waitForAd(maxMs = 5000, interval = 250) {
+            function waitForAd(maxMs = 5000, interval = 250, containerId = 'panda-ad') {
                 return new Promise((resolve) => {
                     const start = Date.now();
-                    const testAd = document.createElement('div');
-                    testAd.innerHTML = '&nbsp;';
-                    testAd.className = 'adsbox ad-placement doubleclick ad-placeholder';
-                    testAd.style.minHeight = '1px';
-                    document.body.appendChild(testAd);
+                    const container = document.getElementById(containerId);
 
-                    const check = () => {
+                    // If no container, fall back to a basic test
+                    if (!container) {
+                      // create a temporary test ad in body
+                      const testAd = document.createElement('div');
+                      testAd.innerHTML = '&nbsp;';
+                      testAd.className = 'adsbox ad-placement doubleclick ad-placeholder';
+                      testAd.style.minHeight = '1px';
+                      document.body.appendChild(testAd);
+
+                      const checkFallback = () => {
                         const elapsed = Date.now() - start;
                         const height = testAd.offsetHeight;
                         if (height > 1) {
@@ -175,6 +186,27 @@ exports.redirectUrl = async (req, res) => {
                         }
                         if (elapsed >= maxMs) {
                             testAd.remove();
+                            return resolve({ blocked: true, timedOut: true });
+                        }
+                        setTimeout(checkFallback, interval);
+                      };
+                      checkFallback();
+                      return;
+                    }
+
+                    const check = () => {
+                        const elapsed = Date.now() - start;
+
+                        // Consider ad present if container has children, iframe, ins, or visible height
+                        const hasChild = container.childElementCount > 0;
+                        const hasAdLike = container.querySelector('iframe, ins, .adsbygoogle, .ad, .adsbox');
+                        const height = container.offsetHeight;
+
+                        if (hasChild || hasAdLike || height > 1) {
+                            return resolve({ blocked: false });
+                        }
+
+                        if (elapsed >= maxMs) {
                             return resolve({ blocked: true, timedOut: true });
                         }
                         setTimeout(check, interval);
@@ -208,7 +240,8 @@ exports.redirectUrl = async (req, res) => {
                 statusEl.textContent = 'Checking ad availability...';
                 progressEl.classList.add('animate-pulse');
 
-                const adResult = await waitForAd(6000, 300);
+                // Wait for an ad to populate the container. Allow a longer timeout for slow ads.
+                const adResult = await waitForAd(8000, 300, 'panda-ad');
 
                 progressEl.classList.remove('animate-pulse');
 
