@@ -1,5 +1,8 @@
 const db = require('../config/db');
-const { generateShortCode } = require('../utils/generateCode');
+// FIX: Changed '../utils/generateCode' to '../utils/generateShortCode'
+// We also handle both "Named Export" and "Default Export" cases to be safe
+const generateCodeModule = require('../utils/generateShortCode');
+const generateShortCode = generateCodeModule.generateShortCode || generateCodeModule;
 
 // 1. GET AD FORMATS
 const getAdFormats = async (req, res) => {
@@ -12,9 +15,9 @@ const getAdFormats = async (req, res) => {
   }
 };
 
-// 2. CREATE SHORT URL (Fixed: Now supports Custom Alias)
+// 2. CREATE SHORT URL
 const createShortUrl = async (req, res) => {
-  const { originalUrl, alias, adFormatId } = req.body; // <--- Added alias here
+  const { originalUrl, alias, adFormatId } = req.body;
   const userId = req.user ? req.user.id : null;
 
   if (!originalUrl) return res.status(400).json({ error: 'Original URL is required' });
@@ -24,8 +27,7 @@ const createShortUrl = async (req, res) => {
 
     // --- CUSTOM ALIAS LOGIC ---
     if (alias && alias.trim() !== "") {
-        const cleanAlias = alias.trim().replace(/[^a-zA-Z0-9-_]/g, ''); // Clean bad chars
-        // Check if taken
+        const cleanAlias = alias.trim().replace(/[^a-zA-Z0-9-_]/g, '');
         const existing = await db.query('SELECT id FROM urls WHERE short_code = $1', [cleanAlias]);
         if (existing.rows.length > 0) {
             return res.status(400).json({ error: 'This alias is already taken. Try another.' });
@@ -33,18 +35,21 @@ const createShortUrl = async (req, res) => {
         shortCode = cleanAlias;
     } 
     else {
-        // Generate Random Code if no alias provided
+        // Generate Random Code
         let isUnique = false;
         let attempts = 0;
         while (!isUnique && attempts < 5) {
-            shortCode = Math.random().toString(36).substring(2, 8);
+            // Use the utility function
+            shortCode = typeof generateShortCode === 'function' 
+                ? generateShortCode() 
+                : Math.random().toString(36).substring(2, 8); // Fallback if utility fails
+            
             const check = await db.query('SELECT id FROM urls WHERE short_code = $1', [shortCode]);
             if (check.rows.length === 0) isUnique = true;
             attempts++;
         }
         if (!isUnique) return res.status(500).json({ error: 'Failed to generate code' });
     }
-    // ---------------------------
 
     // Monetization Logic
     let isMonetized = false;
