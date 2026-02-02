@@ -77,18 +77,21 @@ exports.getMe = async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 };
-bankHolderName, bankAccountNo, bankIfsc } = req.body;
+
+// 4. UPDATE PAYMENT DETAILS
+exports.updatePaymentDetails = async (req, res) => {
+  try {
+    const { upiId, bankHolderName, bankAccountNo, bankIfsc } = req.body;
+    
     await db.query(
       `UPDATE users SET upi_id = $1, bank_holder_name = $2, bank_account_no = $3, bank_ifsc = $4 
        WHERE id = $5`,
-      [upiId, bankHolderName, bankAccountNo, bankIfsc
-    const { upiId, paymentMethod } = req.body;
-    await db.query(
-      'UPDATE users SET upi_id = $1, payment_method = $2 WHERE id = $3',
-      [upiId, paymentMethod || 'UPI', req.user.id]
+      [upiId, bankHolderName, bankAccountNo, bankIfsc, req.user.id]
     );
-    res.json({ message: 'Payment details updated' });
+
+    res.json({ message: 'Payment details updated successfully' });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 };
