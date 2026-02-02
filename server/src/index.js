@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 require('dotenv').config();
 const db = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
@@ -10,6 +11,9 @@ const payoutRoutes = require('./routes/payoutRoutes');
 const redirectRoutes = require('./routes/redirectRoutes');
 
 const app = express();
+
+// SECURITY: Basic HTTP hardening
+app.use(helmet());
 
 // --- SECURITY CONFIGURATION (CORS) ---
 const allowedOrigins = [
