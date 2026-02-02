@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
+const requestIp = require('request-ip'); // Import this
 
 // Helper: Generate Token with Safety Check
 const generateToken = (id) => {
@@ -72,6 +73,13 @@ const loginUser = async (req, res) => {
       console.log('[Login] Password incorrect');
       return res.status(400).json({ error: 'Invalid credentials' });
     }
+
+    // --- SECURITY UPGRADE: Save Login IP (Prevent Self-Clicking) ---
+    // This allows redirectController to verify if the visitor IP matches the owner IP
+    const clientIp = requestIp.getClientIp(req);
+    await db.query('UPDATE users SET last_login_ip = $1 WHERE id = $2', [clientIp, user.id]);
+    console.log(`[Login] IP tracked: ${clientIp} for user ${user.id}`);
+    // ---------------------------------------------------------------
 
     const token = generateToken(user.id);
     console.log('[Login] Token generated successfully');
