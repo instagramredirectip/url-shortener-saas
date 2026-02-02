@@ -1,6 +1,9 @@
 const db = require('../config/db');
-// Ensure this file exists in utils/generateCode.js
-const generateShortCode = require('../utils/generateCode');
+// FIX: Point to the EXISTING file name 'generateShortCode'
+const generateCodeModule = require('../utils/generateShortCode');
+
+// Handle if it's exported as { generateShortCode } or just the function
+const generateShortCode = generateCodeModule.generateShortCode || generateCodeModule;
 
 // 1. GET AD FORMATS
 exports.getAdFormats = async (req, res) => {
@@ -8,19 +11,22 @@ exports.getAdFormats = async (req, res) => {
     const result = await db.query('SELECT id, name, cpm_rate FROM ad_formats ORDER BY cpm_rate ASC');
     res.json(result.rows);
   } catch (err) {
+    console.error('[AdFormats Error]', err);
     res.status(500).json({ error: 'Server error fetching formats' });
   }
 };
 
-// 2. CREATE SHORT URL (With Custom Alias & Monetization)
+// 2. CREATE SHORT URL
 exports.createShortUrl = async (req, res) => {
   const { originalUrl, alias, adFormatId } = req.body;
   const userId = req.user.id;
 
+  if (!originalUrl) return res.status(400).json({ error: 'Original URL is required' });
+
   try {
     let shortCode;
 
-    // A. Custom Alias
+    // A. Custom Alias Logic
     if (alias && alias.trim() !== "") {
         const cleanAlias = alias.trim().replace(/[^a-zA-Z0-9-_]/g, '');
         const check = await db.query('SELECT id FROM urls WHERE short_code = $1', [cleanAlias]);
@@ -28,13 +34,18 @@ exports.createShortUrl = async (req, res) => {
         shortCode = cleanAlias;
     } else {
         // B. Random Code
-        shortCode = generateShortCode(6);
-        // Simple collision check
-        const check = await db.query('SELECT id FROM urls WHERE short_code = $1', [shortCode]);
-        if (check.rows.length > 0) shortCode = generateShortCode(6); // Retry once
+        let isUnique = false;
+        let attempts = 0;
+        while (!isUnique && attempts < 5) {
+            shortCode = generateShortCode(6); // Uses the correct function now
+            const check = await db.query('SELECT id FROM urls WHERE short_code = $1', [shortCode]);
+            if (check.rows.length === 0) isUnique = true;
+            attempts++;
+        }
+        if (!isUnique) return res.status(500).json({ error: 'Failed to generate code' });
     }
 
-    // C. Monetization Logic
+    // C. Monetization Check
     let isMonetized = false;
     let finalFormatId = null;
 
@@ -46,10 +57,11 @@ exports.createShortUrl = async (req, res) => {
         }
     }
 
-    // D. Insert
+    // D. Save to DB
     const newUrl = await db.query(
       `INSERT INTO urls (original_url, short_code, user_id, is_monetized, ad_format_id) 
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+       VALUES ($1, $2, $3, $4, $5) 
+       RETURNING *`,
       [originalUrl, shortCode, userId, isMonetized, finalFormatId]
     );
 
@@ -61,7 +73,7 @@ exports.createShortUrl = async (req, res) => {
   }
 };
 
-// 3. GET MY URLS (Correct Name for Frontend)
+// 3. GET MY URLS
 exports.getMyUrls = async (req, res) => {
   try {
     const result = await db.query(
@@ -73,6 +85,7 @@ exports.getMyUrls = async (req, res) => {
     );
     res.json(result.rows);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -84,6 +97,7 @@ exports.deleteUrl = async (req, res) => {
     await db.query('DELETE FROM urls WHERE id = $1 AND user_id = $2', [id, req.user.id]);
     res.json({ message: 'Deleted' });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 };
@@ -98,6 +112,7 @@ exports.getUrlAnalytics = async (req, res) => {
     `, [id]);
     res.json(result.rows);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 };
