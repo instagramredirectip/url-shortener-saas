@@ -9,24 +9,26 @@ import {
 } from 'recharts';
 import { 
   Wallet, TrendingUp, Link as LinkIcon, Copy, ExternalLink, 
-  Plus, ArrowUpRight, ShieldCheck, Loader2, Zap, Settings, RefreshCw
+  Plus, ArrowUpRight, ShieldCheck, Loader2, Zap, Settings, 
+  CheckCircle2, MousePointer2, AlertCircle
 } from 'lucide-react';
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const [urls, setUrls] = useState([]); 
   const [adFormats, setAdFormats] = useState([]); 
-  const [selectedFormat, setSelectedFormat] = useState('');
+  const [selectedFormat, setSelectedFormat] = useState(""); // Default to "" (No Ads)
   const [loading, setLoading] = useState(true);
   
   // Form State
   const [newUrl, setNewUrl] = useState('');
   const [creating, setCreating] = useState(false);
+  const [showFormatSelector, setShowFormatSelector] = useState(false); // Toggle for mobile/cleaner UI
 
   // Stats
   const [stats, setStats] = useState({ totalClicks: 0, todayEarnings: 0 });
 
-  // Fake chart data (placeholder)
+  // Fake chart data
   const chartData = [
     { name: 'Mon', earnings: 120 },
     { name: 'Tue', earnings: 240 },
@@ -69,12 +71,8 @@ const Dashboard = () => {
   const fetchAdFormats = async () => {
     try {
       const { data } = await api.get('/urls/formats');
-      
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         setAdFormats(data);
-        setSelectedFormat(data[0].id);
-      } else {
-        setAdFormats([]);
       }
     } catch (err) {
       console.error("Error loading formats:", err);
@@ -86,6 +84,7 @@ const Dashboard = () => {
     if (!newUrl) return;
     setCreating(true);
     try {
+      // If selectedFormat is empty string "", send null to backend (No Ads)
       const payload = { 
         originalUrl: newUrl,
         adFormatId: selectedFormat || null 
@@ -93,9 +92,10 @@ const Dashboard = () => {
       
       const { data } = await api.post('/urls/shorten', payload);
       
-      toast.success('Link Shortened!');
+      toast.success('Link Created Successfully!');
       setUrls([data, ...urls]); 
       setNewUrl(''); 
+      setShowFormatSelector(false); // Close selector after creating
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to create link');
     } finally {
@@ -119,21 +119,21 @@ const Dashboard = () => {
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900">
       
       {/* NAVBAR */}
-      <nav className="bg-white border-b border-slate-200 sticky top-0 z-30">
+      <nav className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center gap-2">
               <Link to="/" className="text-2xl font-black tracking-tighter flex items-center gap-1">
                 Panda<span className="text-green-600">Lime</span>
               </Link>
-              <span className="hidden md:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                Pro Account
+              <span className="hidden md:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 border border-green-200">
+                Pro
               </span>
             </div>
             <div className="flex items-center gap-4">
               <div className="hidden md:flex flex-col items-end mr-2">
                 <span className="text-sm font-bold text-slate-700">{user?.email}</span>
-                <span className="text-xs text-slate-500">ID: {user?.id}</span>
+                <span className="text-xs text-slate-500 font-mono">ID: {user?.id}</span>
               </div>
               <button onClick={logout} className="text-sm font-medium text-slate-500 hover:text-red-600 transition-colors">
                 Log out
@@ -151,7 +151,7 @@ const Dashboard = () => {
             <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
             <p className="text-slate-500 mt-1">Manage your links and track your revenue.</p>
           </div>
-          <Link to="/payouts" className="inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-lg font-bold shadow-lg shadow-slate-200 transition-all transform hover:-translate-y-0.5">
+          <Link to="/payouts" className="inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-slate-200 transition-all transform hover:-translate-y-0.5">
             <Wallet size={18} /> Withdraw Funds
           </Link>
         </div>
@@ -161,9 +161,9 @@ const Dashboard = () => {
           {/* Balance */}
           <motion.div 
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-            className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden"
+            className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:border-green-200 transition-all"
           >
-            <div className="absolute top-0 right-0 p-4 opacity-10"><Wallet size={64} className="text-green-600" /></div>
+            <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity"><Wallet size={64} className="text-green-600" /></div>
             <p className="text-sm font-medium text-slate-500 mb-1">Total Balance</p>
             <h2 className="text-4xl font-black text-slate-900 tracking-tight">
               ₹{parseFloat(user?.wallet_balance || 0).toFixed(2)}
@@ -177,7 +177,7 @@ const Dashboard = () => {
           {/* Performance */}
           <motion.div 
              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-             className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100"
+             className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 group hover:border-blue-200 transition-all"
           >
             <div className="flex justify-between items-start mb-4">
               <div className="p-2 bg-blue-50 rounded-lg text-blue-600"><TrendingUp size={24} /></div>
@@ -194,59 +194,110 @@ const Dashboard = () => {
             </div>
           </motion.div>
 
-          {/* CREATE LINK CARD */}
+          {/* CREATE LINK CARD (The Modern Interactive Version) */}
           <motion.div 
              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-             className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 rounded-2xl shadow-lg text-white"
+             className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 rounded-2xl shadow-lg text-white md:col-span-1 col-span-1"
           >
-            <h3 className="font-bold text-lg mb-3 flex items-center gap-2">
+            <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
               <Zap size={20} className="text-yellow-400" /> Create New Link
             </h3>
             
-            <form onSubmit={handleCreate} className="space-y-3">
-              <input 
-                type="url" 
-                placeholder="Paste URL (e.g. instagram.com/...)" 
-                className="w-full px-4 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-slate-400 focus:outline-none focus:bg-white/20 transition-all text-sm"
-                value={newUrl}
-                onChange={(e) => setNewUrl(e.target.value)}
-              />
-              
-              <div className="flex gap-2">
-                <select 
-                  className="flex-1 px-4 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white focus:outline-none focus:bg-white/20 text-sm [&>option]:text-slate-900"
-                  value={selectedFormat}
-                  onChange={(e) => setSelectedFormat(e.target.value)}
-                >
-                   {adFormats.length > 0 ? (
-                      adFormats.map(fmt => (
-                        <option key={fmt.id} value={fmt.id}>
-                          {/* FIX: Use display_name and cpm_rate_inr to match your backend */}
-                          {fmt.display_name} - ₹{fmt.cpm_rate_inr}/1k
-                        </option>
-                      ))
-                   ) : (
-                      <option value="">{loading ? "Loading..." : "No formats found"}</option>
-                   )}
-                </select>
-
-                <button 
-                  disabled={creating}
-                  className="bg-green-500 hover:bg-green-400 text-slate-900 font-bold px-4 rounded-xl transition-colors flex items-center justify-center"
-                >
-                  {creating ? <Loader2 className="animate-spin w-5 h-5" /> : <Plus size={20} />}
-                </button>
+            <form onSubmit={handleCreate} className="space-y-4">
+              {/* URL Input */}
+              <div className="relative">
+                <input 
+                  type="url" 
+                  placeholder="Paste URL (e.g. instagram.com/reel...)" 
+                  className="w-full pl-4 pr-10 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-slate-400 focus:outline-none focus:bg-white/20 focus:border-green-500/50 transition-all text-sm"
+                  value={newUrl}
+                  onChange={(e) => setNewUrl(e.target.value)}
+                />
+                <div className="absolute right-3 top-3 text-slate-400 pointer-events-none">
+                  <LinkIcon size={16} />
+                </div>
               </div>
+
+              {/* Interactive Format Selector Toggle */}
+              <div>
+                <button 
+                  type="button"
+                  onClick={() => setShowFormatSelector(!showFormatSelector)}
+                  className="w-full flex items-center justify-between text-xs font-semibold bg-black/20 hover:bg-black/30 p-2 rounded-lg text-slate-300 transition-colors"
+                >
+                   <span>Monetization: <span className="text-white">{selectedFormat === "" ? "Direct (No Ads)" : "High Paying Ads"}</span></span>
+                   <Settings size={14} />
+                </button>
+
+                {/* The Modern Grid Selector */}
+                {showFormatSelector && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    className="mt-3 grid grid-cols-1 gap-2 overflow-hidden"
+                  >
+                    {/* OPTION 1: Guaranteed No Ads */}
+                    <div 
+                      onClick={() => setSelectedFormat("")}
+                      className={`cursor-pointer p-3 rounded-xl border-2 transition-all flex items-center justify-between group ${
+                        selectedFormat === "" 
+                        ? 'border-green-500 bg-green-500/20' 
+                        : 'border-white/10 bg-white/5 hover:bg-white/10'
+                      }`}
+                    >
+                       <div className="flex items-center gap-3">
+                          <div className={`p-2 rounded-lg ${selectedFormat === "" ? 'bg-green-500 text-white' : 'bg-slate-700 text-slate-400'}`}>
+                            <MousePointer2 size={16} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-white">Direct Link</p>
+                            <p className="text-[10px] text-slate-400">No Ads • Instant Redirect</p>
+                          </div>
+                       </div>
+                       {selectedFormat === "" && <CheckCircle2 size={18} className="text-green-500" />}
+                    </div>
+
+                    {/* OPTION 2: Dynamic Formats from DB */}
+                    {adFormats.map((fmt) => (
+                      <div 
+                        key={fmt.id}
+                        onClick={() => setSelectedFormat(fmt.id)}
+                        className={`cursor-pointer p-3 rounded-xl border-2 transition-all flex items-center justify-between group ${
+                          selectedFormat === fmt.id 
+                          ? 'border-yellow-500 bg-yellow-500/20' 
+                          : 'border-white/10 bg-white/5 hover:bg-white/10'
+                        }`}
+                      >
+                         <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${selectedFormat === fmt.id ? 'bg-yellow-500 text-black' : 'bg-slate-700 text-slate-400'}`}>
+                              <Zap size={16} fill="currentColor" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-bold text-white">{fmt.name || fmt.display_name}</p>
+                              <p className="text-[10px] text-yellow-200">Earn ₹{fmt.cpm_rate || fmt.cpm_rate_inr}/1k Views</p>
+                            </div>
+                         </div>
+                         {selectedFormat === fmt.id && <CheckCircle2 size={18} className="text-yellow-500" />}
+                      </div>
+                    ))}
+                  </motion.div>
+                )}
+              </div>
+
+              {/* Submit Button */}
+              <button 
+                disabled={creating || !newUrl}
+                className="w-full bg-green-500 hover:bg-green-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-900 font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-900/20"
+              >
+                {creating ? <Loader2 className="animate-spin w-5 h-5" /> : <>Create Short Link <ArrowUpRight size={18} /></>}
+              </button>
             </form>
           </motion.div>
         </div>
 
-        {/* CONTENT GRID */}
+        {/* LINKS LIST */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
-          {/* CHART & TABLE */}
           <div className="lg:col-span-2 space-y-8">
-            {/* Chart */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-[320px]">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="font-bold text-lg text-slate-800">Revenue Overview</h3>
@@ -268,7 +319,6 @@ const Dashboard = () => {
               </ResponsiveContainer>
             </div>
 
-            {/* Links List */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
               <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                 <h3 className="font-bold text-lg text-slate-800">Your Links</h3>
@@ -285,7 +335,7 @@ const Dashboard = () => {
                   {urls.map((url) => (
                     <div key={url.id} className="p-4 hover:bg-slate-50 transition-colors flex items-center justify-between group">
                       <div className="flex items-center gap-4 overflow-hidden">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${url.is_monetized ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-500'}`}>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${url.is_monetized ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-500'}`}>
                           {url.is_monetized ? <Zap size={20} fill="currentColor" /> : <LinkIcon size={20} />}
                         </div>
                         <div className="min-w-0">
@@ -297,15 +347,13 @@ const Dashboard = () => {
                           </p>
                         </div>
                       </div>
-                      
                       <div className="flex items-center gap-2">
                         <div className="hidden md:block text-right mr-4">
                           <p className="text-xs font-bold text-slate-700">{url.click_count} clicks</p>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${url.is_monetized ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
-                            {url.is_monetized ? 'Ads ON' : 'Ads OFF'}
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${url.is_monetized ? 'bg-yellow-100 text-yellow-700' : 'bg-slate-100 text-slate-600'}`}>
+                            {url.is_monetized ? 'Monetized' : 'No Ads'}
                           </span>
                         </div>
-                        
                         <button onClick={() => copyToClipboard(url.short_code)} className="p-2 hover:bg-white border border-transparent hover:border-slate-200 rounded-lg text-slate-500 hover:text-green-600 transition-all">
                           <Copy size={16} />
                         </button>
@@ -320,7 +368,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* RIGHT COLUMN */}
           <div className="space-y-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
               <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
@@ -339,9 +386,7 @@ const Dashboard = () => {
                     style={{ width: `${Math.min(user?.fraud_score || 0, 100)}%` }}
                   ></div>
                 </div>
-                <p className="text-xs text-slate-400">
-                  Keep your traffic real to avoid bans.
-                </p>
+                <p className="text-xs text-slate-400">Keep traffic real to avoid bans.</p>
               </div>
             </div>
 
@@ -350,11 +395,10 @@ const Dashboard = () => {
                 <Zap size={18} fill="currentColor" /> Pro Tip
               </h4>
               <p className="text-sm text-blue-800 mb-4 leading-relaxed">
-                Links shared on Instagram Stories have a 3x higher click-through rate than bio links.
+                "Interstitial Ads" pay 2x more than standard banners. Use them for your most viral content.
               </p>
             </div>
           </div>
-
         </div>
       </main>
     </div>
