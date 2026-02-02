@@ -1,6 +1,5 @@
 const db = require('../config/db');
-// FIX: Changed '../utils/generateCode' to '../utils/generateShortCode'
-// We also handle both "Named Export" and "Default Export" cases to be safe
+// Fix: Import the correct file name you confirmed exists
 const generateCodeModule = require('../utils/generateShortCode');
 const generateShortCode = generateCodeModule.generateShortCode || generateCodeModule;
 
@@ -15,7 +14,7 @@ const getAdFormats = async (req, res) => {
   }
 };
 
-// 2. CREATE SHORT URL
+// 2. CREATE SHORT URL (With Custom Alias)
 const createShortUrl = async (req, res) => {
   const { originalUrl, alias, adFormatId } = req.body;
   const userId = req.user ? req.user.id : null;
@@ -28,6 +27,7 @@ const createShortUrl = async (req, res) => {
     // --- CUSTOM ALIAS LOGIC ---
     if (alias && alias.trim() !== "") {
         const cleanAlias = alias.trim().replace(/[^a-zA-Z0-9-_]/g, '');
+        // Check if taken
         const existing = await db.query('SELECT id FROM urls WHERE short_code = $1', [cleanAlias]);
         if (existing.rows.length > 0) {
             return res.status(400).json({ error: 'This alias is already taken. Try another.' });
@@ -39,10 +39,9 @@ const createShortUrl = async (req, res) => {
         let isUnique = false;
         let attempts = 0;
         while (!isUnique && attempts < 5) {
-            // Use the utility function
             shortCode = typeof generateShortCode === 'function' 
                 ? generateShortCode() 
-                : Math.random().toString(36).substring(2, 8); // Fallback if utility fails
+                : Math.random().toString(36).substring(2, 8); 
             
             const check = await db.query('SELECT id FROM urls WHERE short_code = $1', [shortCode]);
             if (check.rows.length === 0) isUnique = true;
@@ -110,9 +109,32 @@ const deleteUrl = async (req, res) => {
   }
 };
 
+// 5. GET URL ANALYTICS (RESTORED)
+const getUrlAnalytics = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const urlCheck = await db.query('SELECT * FROM urls WHERE id = $1 AND user_id = $2', [id, req.user.id]);
+    if (urlCheck.rows.length === 0) return res.status(404).json({ error: 'URL not found' });
+
+    const result = await db.query(`
+      SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as date, COUNT(*) as count
+      FROM impressions
+      WHERE url_id = $1
+      GROUP BY date
+      ORDER BY date ASC
+    `, [id]);
+    
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
 module.exports = { 
   createShortUrl, 
   getMyUrls, 
   deleteUrl, 
-  getAdFormats
+  getAdFormats,
+  getUrlAnalytics // <--- THIS WAS MISSING
 };
