@@ -5,8 +5,7 @@ const requestIp = require('request-ip');
 // --- SECURITY CONFIGURATION ---
 const MAX_CLICKS_PER_IP_HOURLY = 15; 
 const BAN_THRESHOLD = 20; 
-const FRAUD_POINT_BOT = 0; 
-const FRAUD_POINT_SELF = 2; 
+const FRAUD_POINT_SELF = 2; // High penalty for self-clicking
 const FRAUD_POINT_SPAM = 1; 
 
 exports.redirectUrl = async (req, res) => {
@@ -32,38 +31,55 @@ exports.redirectUrl = async (req, res) => {
     if (!urlData) return res.status(404).send('<h1>404 - Link Not Found</h1>');
     if (!urlData.is_active) return res.status(410).send('<h1>Link Disabled</h1>');
     
-    // 3. BLOCK BANNED USERS
+    // 3. BLOCK ALREADY BANNED OWNERS
     if (urlData.is_banned) {
       return res.status(403).send('<h1>🚫 Account Suspended</h1><p>Link owner is banned.</p>');
     }
 
-    // 4. SECURITY & FRAUD CHECKS
+    // 4. NON-MONETIZED -> SKIP CHECKS
+    if (!urlData.is_monetized || !urlData.js_code_snippet) {
+      await db.query('UPDATE urls SET click_count = click_count + 1 WHERE id = $1', [urlData.id]);
+      const safeUrl = urlData.original_url.startsWith('http') ? urlData.original_url : '/';
+      return res.redirect(safeUrl);
+    }
+
+    // 5. SECURITY CHECKS
     const clientIp = requestIp.getClientIp(req); 
     const userAgent = req.headers['user-agent'] || '';
     let fraudPointsToAdd = 0;
     
-    // A. Bot Detection (Redirect immediately)
+    // A. Bot Detection (Redirect immediately, no ban, no pay)
     if (isbot(userAgent)) {
       return res.redirect(urlData.original_url);
     }
 
-    // B. Self-Click Detection
+    // B. Self-Click Detection (The Owner is clicking)
     const isSelfClick = (urlData.last_login_ip && urlData.last_login_ip === clientIp);
-    if (isSelfClick) fraudPointsToAdd += FRAUD_POINT_SELF;
+    if (isSelfClick) {
+       // YOU clicked your own link -> You get punished
+       fraudPointsToAdd += FRAUD_POINT_SELF;
+    }
 
-    // C. Spam IP Detection
+    // C. Spam IP Detection (Anyone clicking too fast)
     const ipActivity = await db.query(
       `SELECT COUNT(*) FROM impressions WHERE visitor_ip = $1 AND created_at > NOW() - INTERVAL '1 hour'`,
       [clientIp]
     );
     const recentClicks = parseInt(ipActivity.rows[0].count);
     const isSpamIP = recentClicks > MAX_CLICKS_PER_IP_HOURLY;
-    if (isSpamIP) fraudPointsToAdd += FRAUD_POINT_SPAM;
+    
+    if (isSpamIP) {
+       if (isSelfClick) {
+         // Owner is spamming -> Add points -> BAN
+         fraudPointsToAdd += FRAUD_POINT_SPAM;
+       } else {
+         // Stranger is spamming -> NO POINTS -> NO BAN
+         console.log(`[External Spam] IP ${clientIp} spamming link ${urlData.id}. Payment blocked, but Owner safe.`);
+       }
+    }
 
-    // 5. UPDATE FRAUD SCORE (If needed)
+    // 6. UPDATE FRAUD SCORE (Only if it was the OWNER)
     if (fraudPointsToAdd > 0 && urlData.user_id) {
-       // Only ban if it's NOT a self-click (Self-clicks are just annoying, not necessarily malicious)
-       // But if you want strict banning, keep logic as is.
        const updateRes = await db.query(
         `UPDATE users SET fraud_score = fraud_score + $1 WHERE id = $2 RETURNING fraud_score`,
         [fraudPointsToAdd, urlData.user_id]
@@ -74,25 +90,13 @@ exports.redirectUrl = async (req, res) => {
       }
     }
 
-    // --- LOGIC FIX START ---
-
-    // 6. NON-MONETIZED LINKS -> Redirect Immediately
-    // (Free users or "No Ads" option selected)
-    if (!urlData.is_monetized || !urlData.js_code_snippet) {
-      await db.query('UPDATE urls SET click_count = click_count + 1 WHERE id = $1', [urlData.id]);
-      const safeUrl = urlData.original_url.startsWith('http') ? urlData.original_url : '/';
-      return res.redirect(safeUrl);
-    }
-
-    // 7. MONETIZED LINKS -> ALWAYS SHOW PAGE
-    // We serve the page regardless of whether we pay or not.
-    // This ensures Self-Clicks still see the ad page (authenticity test passes).
-    
-    // DECIDE: Do we pay for this view?
-    // Must be: Not Self Click AND Not Spam
+    // 7. PAYOUT LOGIC
+    // We pay ONLY if it's clean traffic.
+    // If it's Spam (even from a stranger), we DO NOT PAY (to save your money), but we show the page.
     const isValidForPayout = !isSelfClick && !isSpamIP;
 
     if (isValidForPayout) {
+        // Check 24h Uniqueness
         const existingView = await db.query(
             `SELECT id FROM impressions 
              WHERE url_id = $1 AND visitor_ip = $2 
@@ -116,7 +120,7 @@ exports.redirectUrl = async (req, res) => {
         }
     }
 
-    // Always increment public click count (even for self-clicks)
+    // Always increment public click count
     await db.query('UPDATE urls SET click_count = click_count + 1 WHERE id = $1', [urlData.id]);
 
     // 8. SERVE PAGE
@@ -128,7 +132,7 @@ exports.redirectUrl = async (req, res) => {
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Security Check | PandaLime</title>
+        <title>PandaLime | Secure Link</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script>
             if (window.top !== window.self) { window.top.location = window.self.location; }
