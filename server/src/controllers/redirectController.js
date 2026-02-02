@@ -4,7 +4,7 @@ const requestIp = require('request-ip');
 
 // --- SECURITY CONFIGURATION ---
 const MAX_CLICKS_PER_IP_HOURLY = 15; 
-const BAN_THRESHOLD = 20; 
+const BAN_THRESHOLD = 50; // <--- INCREASED TO 50 (More lenient for testing)
 const FRAUD_POINT_SELF = 2; // High penalty for self-clicking
 const FRAUD_POINT_SPAM = 1; 
 
@@ -92,7 +92,6 @@ exports.redirectUrl = async (req, res) => {
 
     // 7. PAYOUT LOGIC
     // We pay ONLY if it's clean traffic.
-    // If it's Spam (even from a stranger), we DO NOT PAY (to save your money), but we show the page.
     const isValidForPayout = !isSelfClick && !isSpamIP;
 
     if (isValidForPayout) {
