@@ -17,8 +17,16 @@ exports.requestPayout = async (req, res) => {
     const COMMISSION = parseFloat((GROSS * 0.30).toFixed(2));
     const NET = parseFloat((GROSS - COMMISSION).toFixed(2));
 
-    // 2. Start Transaction
+    // 2. Start Transaction and lock user row to prevent concurrent withdrawals
     await db.query('BEGIN');
+
+    // Lock user's row
+    const lockRes = await db.query('SELECT wallet_balance FROM users WHERE id = $1 FOR UPDATE', [userId]);
+    const lockedBalance = parseFloat(lockRes.rows[0].wallet_balance);
+    if (lockedBalance < GROSS) {
+      await db.query('ROLLBACK');
+      return res.status(400).json({ error: 'Insufficient balance' });
+    }
 
     // Deduct full gross balance from user wallet
     await db.query('UPDATE users SET wallet_balance = wallet_balance - $1 WHERE id = $2', [GROSS, userId]);
@@ -81,20 +89,32 @@ exports.processPayout = async (req, res) => {
   try {
     await db.query('BEGIN');
 
-    const request = await db.query('SELECT * FROM payout_requests WHERE id = $1', [id]);
-    if (request.rows.length === 0) return res.status(404).json({ error: 'Request not found' });
+    // Lock the payout row to avoid race conditions
+    const requestRes = await db.query('SELECT * FROM payout_requests WHERE id = $1 FOR UPDATE', [id]);
+    if (requestRes.rows.length === 0) {
+      await db.query('ROLLBACK');
+      return res.status(404).json({ error: 'Request not found' });
+    }
+
+    const request = requestRes.rows[0];
+
+    // Only allow processing pending requests
+    if (request.status !== 'pending') {
+      await db.query('ROLLBACK');
+      return res.status(400).json({ error: 'Request already processed' });
+    }
 
     // Update Status
     await db.query(
-      'UPDATE payout_requests SET status = $1, admin_note = $2, processed_at = NOW() WHERE id = $3',
-      [status, note, id]
+      'UPDATE payout_requests SET status = $1, admin_note = $2, processed_at = NOW(), processed_by = $3 WHERE id = $4',
+      [status, note, req.user.id, id]
     );
 
-    // If Rejected, Refund the money
+    // If Rejected, Refund the gross amount (we deducted gross at request creation)
     if (status === 'rejected') {
       await db.query(
         'UPDATE users SET wallet_balance = wallet_balance + $1 WHERE id = $2',
-        [request.rows[0].amount, request.rows[0].user_id]
+        [request.gross_amount || request.amount, request.user_id]
       );
     }
 

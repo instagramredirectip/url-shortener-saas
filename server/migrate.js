@@ -49,6 +49,9 @@ const migrationQuery = `
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
 
+  -- Prevent duplicate impressions/payments by creating a daily uniqueness index (defense-in-depth)
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_impression_unique_daily ON impressions (url_id, visitor_ip, (created_at::date));
+
   -- 6. Create 'payout_requests' table
   DO $$ BEGIN
       CREATE TYPE payout_status AS ENUM ('pending', 'approved', 'rejected');

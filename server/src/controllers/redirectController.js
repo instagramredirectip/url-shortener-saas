@@ -223,16 +223,25 @@ exports.verifyView = async (req, res) => {
         );
 
         if (existingView.rows.length === 0) {
+            // START ATOMIC TRANSACTION: Attempt an INSERT only if no recent impression exists (prevents race/double-pay)
             await db.query('BEGIN');
-            
-            // Log Impression
-            await db.query(
+
+            const insertRes = await db.query(
                 `INSERT INTO impressions (url_id, user_id, ad_format_id, visitor_ip, visitor_user_agent, earned_amount)
-                 VALUES ($1, $2, $3, $4, $5, $6)`,
-                [decoded.url_id, decoded.user_id, decoded.ad_format_id, decoded.visitor_ip, decoded.visitor_ua, decoded.amount]
+                 SELECT $1, $2, $3, $4, $5, $6
+                 WHERE NOT EXISTS (
+                   SELECT 1 FROM impressions WHERE url_id = $7 AND visitor_ip = $8 AND created_at > NOW() - INTERVAL '24 hours'
+                 ) RETURNING id`,
+                [decoded.url_id, decoded.user_id, decoded.ad_format_id, decoded.visitor_ip, decoded.visitor_ua, decoded.amount, decoded.url_id, decoded.visitor_ip]
             );
 
-            // Update Wallet
+            // If insert did not happen (concurrent insert), rollback and report duplicate
+            if (insertRes.rows.length === 0) {
+                await db.query('ROLLBACK');
+                return res.json({ success: true, paid: false, reason: 'Duplicate 24h' });
+            }
+
+            // Update Wallet (safe inside same transaction)
             await db.query(
                 'UPDATE users SET wallet_balance = wallet_balance + $1, total_earnings = total_earnings + $1 WHERE id = $2',
                 [decoded.amount, decoded.user_id]

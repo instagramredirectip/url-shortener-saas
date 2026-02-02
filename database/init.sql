@@ -78,6 +78,9 @@ CREATE TABLE IF NOT EXISTS impressions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Add a uniqueness index to help enforce one impression per IP per day (defense-in-depth)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_impression_unique_daily ON impressions (url_id, visitor_ip, (created_at::date));
+
 -- 7. Payout Requests Table
 DO $$ BEGIN
     CREATE TYPE payout_status AS ENUM ('pending', 'approved', 'rejected');
