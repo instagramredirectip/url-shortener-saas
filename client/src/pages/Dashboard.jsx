@@ -14,8 +14,8 @@ import {
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
-  const [urls, setUrls] = useState([]); // Default empty array
-  const [adFormats, setAdFormats] = useState([]); // Default empty array
+  const [urls, setUrls] = useState([]); 
+  const [adFormats, setAdFormats] = useState([]); 
   const [selectedFormat, setSelectedFormat] = useState('');
   const [loading, setLoading] = useState(true);
   
@@ -26,7 +26,7 @@ const Dashboard = () => {
   // Stats
   const [stats, setStats] = useState({ totalClicks: 0, todayEarnings: 0 });
 
-  // Fake chart data
+  // Fake chart data (placeholder)
   const chartData = [
     { name: 'Mon', earnings: 120 },
     { name: 'Tue', earnings: 240 },
@@ -50,8 +50,6 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     try {
       const { data } = await api.get('/urls/myurls');
-      
-      // CRASH PROOF CHECK: Ensure data is actually an array
       if (Array.isArray(data)) {
         setUrls(data);
         const clicks = data.reduce((acc, curr) => acc + parseInt(curr.click_count || 0), 0);
@@ -60,8 +58,7 @@ const Dashboard = () => {
           todayEarnings: (clicks * 0.25).toFixed(2) 
         });
       } else {
-        console.error("API did not return a list of URLs:", data);
-        setUrls([]); // Fallback to empty list
+        setUrls([]);
       }
     } catch (err) {
       console.error("Error loading dashboard:", err);
@@ -73,12 +70,10 @@ const Dashboard = () => {
     try {
       const { data } = await api.get('/urls/formats');
       
-      // CRASH PROOF CHECK: Ensure data is an array
       if (Array.isArray(data) && data.length > 0) {
         setAdFormats(data);
         setSelectedFormat(data[0].id);
       } else {
-        console.warn("No ad formats found or API error");
         setAdFormats([]);
       }
     } catch (err) {
@@ -93,7 +88,7 @@ const Dashboard = () => {
     try {
       const payload = { 
         originalUrl: newUrl,
-        adFormatId: selectedFormat || null // Send null if empty
+        adFormatId: selectedFormat || null 
       };
       
       const { data } = await api.post('/urls/shorten', payload);
@@ -225,10 +220,13 @@ const Dashboard = () => {
                 >
                    {adFormats.length > 0 ? (
                       adFormats.map(fmt => (
-                        <option key={fmt.id} value={fmt.id}>{fmt.name} - ₹{fmt.cpm_rate}/1k</option>
+                        <option key={fmt.id} value={fmt.id}>
+                          {/* FIX: Use display_name and cpm_rate_inr to match your backend */}
+                          {fmt.display_name} - ₹{fmt.cpm_rate_inr}/1k
+                        </option>
                       ))
                    ) : (
-                      <option value="">{adFormats.length === 0 ? "Loading Formats..." : "No formats available"}</option>
+                      <option value="">{loading ? "Loading..." : "No formats found"}</option>
                    )}
                 </select>
 
