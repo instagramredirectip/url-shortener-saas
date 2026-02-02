@@ -1,19 +1,19 @@
 const db = require('../config/db');
-const { isbot } = require('isbot'); // Detects Googlebot, curl, python-requests
-const requestIp = require('request-ip'); // Safe IP extraction
+const { isbot } = require('isbot'); 
+const requestIp = require('request-ip'); 
 
 // --- SECURITY CONFIGURATION ---
-const MAX_CLICKS_PER_IP_HOURLY = 15; // >15 clicks from same IP in 1 hour = SPAM
-const BAN_THRESHOLD = 20; // If user gets 20 fraud points -> AUTO BAN
-const FRAUD_POINT_BOT = 0; // Bots don't ban users (too risky), just ignored
-const FRAUD_POINT_SELF = 2; // Self-clicking adds 2 points
-const FRAUD_POINT_SPAM = 1; // Spam traffic adds 1 point
+const MAX_CLICKS_PER_IP_HOURLY = 15; 
+const BAN_THRESHOLD = 20; 
+const FRAUD_POINT_BOT = 0; 
+const FRAUD_POINT_SELF = 2; 
+const FRAUD_POINT_SPAM = 1; 
 
 exports.redirectUrl = async (req, res) => {
   try {
     const { code } = req.params;
 
-    // 1. FETCH LINK & USER DATA
+    // 1. FETCH DATA
     const query = `
       SELECT u.id, u.original_url, u.is_active, u.is_monetized, u.user_id, u.ad_format_id,
              af.js_code_snippet, ar.cpm_rate_inr,
@@ -32,108 +32,94 @@ exports.redirectUrl = async (req, res) => {
     if (!urlData) return res.status(404).send('<h1>404 - Link Not Found</h1>');
     if (!urlData.is_active) return res.status(410).send('<h1>Link Disabled</h1>');
     
-    // 3. BLOCK BANNED USERS IMMEDIATELY
+    // 3. BLOCK BANNED USERS
     if (urlData.is_banned) {
-      console.log(`[Blocked] Visit to banned user link: ${urlData.user_id}`);
-      return res.status(403).send(`
-        <div style="text-align:center; font-family:sans-serif; padding:50px;">
-          <h1>🚫 Account Suspended</h1>
-          <p>The owner of this link has been banned for violating our Terms of Service.</p>
-        </div>
-      `);
+      return res.status(403).send('<h1>🚫 Account Suspended</h1><p>Link owner is banned.</p>');
     }
 
-    // 4. SECURITY ANALYSIS
+    // 4. SECURITY & FRAUD CHECKS
     const clientIp = requestIp.getClientIp(req); 
     const userAgent = req.headers['user-agent'] || '';
     let fraudPointsToAdd = 0;
-    let fraudReason = '';
-
-    // A. Bot Detection
+    
+    // A. Bot Detection (Redirect immediately)
     if (isbot(userAgent)) {
-      // Just redirect bots directly, no money, no fraud points (harmless)
       return res.redirect(urlData.original_url);
     }
 
-    // B. Self-Click Detection (Matches Login IP)
+    // B. Self-Click Detection
     const isSelfClick = (urlData.last_login_ip && urlData.last_login_ip === clientIp);
-    if (isSelfClick) {
-       fraudPointsToAdd += FRAUD_POINT_SELF;
-       fraudReason = 'Self-Click';
-    }
+    if (isSelfClick) fraudPointsToAdd += FRAUD_POINT_SELF;
 
-    // C. Spam IP Detection (Rate Limit)
+    // C. Spam IP Detection
     const ipActivity = await db.query(
       `SELECT COUNT(*) FROM impressions WHERE visitor_ip = $1 AND created_at > NOW() - INTERVAL '1 hour'`,
       [clientIp]
     );
     const recentClicks = parseInt(ipActivity.rows[0].count);
     const isSpamIP = recentClicks > MAX_CLICKS_PER_IP_HOURLY;
-    
-    if (isSpamIP) {
-       fraudPointsToAdd += FRAUD_POINT_SPAM;
-       fraudReason = 'Spam Traffic';
-    }
+    if (isSpamIP) fraudPointsToAdd += FRAUD_POINT_SPAM;
 
-    // 5. PUNISHMENT SYSTEM (Auto-Ban Logic)
+    // 5. UPDATE FRAUD SCORE (If needed)
     if (fraudPointsToAdd > 0 && urlData.user_id) {
-      console.log(`[Fraud Warning] User ${urlData.user_id} | Reason: ${fraudReason} | Points: +${fraudPointsToAdd}`);
-      
-      // Update Fraud Score
-      const updateRes = await db.query(
+       // Only ban if it's NOT a self-click (Self-clicks are just annoying, not necessarily malicious)
+       // But if you want strict banning, keep logic as is.
+       const updateRes = await db.query(
         `UPDATE users SET fraud_score = fraud_score + $1 WHERE id = $2 RETURNING fraud_score`,
         [fraudPointsToAdd, urlData.user_id]
       );
-
-      // Check if they crossed the line
-      const newScore = updateRes.rows[0].fraud_score;
-      if (newScore >= BAN_THRESHOLD) {
+      if (updateRes.rows[0].fraud_score >= BAN_THRESHOLD) {
         await db.query(`UPDATE users SET is_banned = TRUE WHERE id = $1`, [urlData.user_id]);
-        console.log(`[🚨 USER BANNED] User ${urlData.user_id} reached fraud score ${newScore}`);
         return res.status(403).send('<h1>Link Unreachable - Security Violation</h1>');
       }
     }
 
-    // 6. MONETIZATION DECISION
-    // Pay ONLY if: Monetized + Not Self Click + Not Spam
-    const shouldPay = urlData.is_monetized && urlData.js_code_snippet && !isSelfClick && !isSpamIP;
+    // --- LOGIC FIX START ---
 
-    if (!shouldPay) {
-      // Valid Redirect, but $0.00 earnings
+    // 6. NON-MONETIZED LINKS -> Redirect Immediately
+    // (Free users or "No Ads" option selected)
+    if (!urlData.is_monetized || !urlData.js_code_snippet) {
       await db.query('UPDATE urls SET click_count = click_count + 1 WHERE id = $1', [urlData.id]);
       const safeUrl = urlData.original_url.startsWith('http') ? urlData.original_url : '/';
       return res.redirect(safeUrl);
     }
 
-    // 7. RECORD VALID EARNING
-    // Check 24h Uniqueness
-    const existingView = await db.query(
-      `SELECT id FROM impressions 
-       WHERE url_id = $1 AND visitor_ip = $2 
-       AND created_at > NOW() - INTERVAL '24 hours'`,
-      [urlData.id, clientIp]
-    );
+    // 7. MONETIZED LINKS -> ALWAYS SHOW PAGE
+    // We serve the page regardless of whether we pay or not.
+    // This ensures Self-Clicks still see the ad page (authenticity test passes).
+    
+    // DECIDE: Do we pay for this view?
+    // Must be: Not Self Click AND Not Spam
+    const isValidForPayout = !isSelfClick && !isSpamIP;
 
-    if (existingView.rows.length === 0) {
-      const earningAmount = parseFloat(urlData.cpm_rate_inr || 0) / 1000;
+    if (isValidForPayout) {
+        const existingView = await db.query(
+            `SELECT id FROM impressions 
+             WHERE url_id = $1 AND visitor_ip = $2 
+             AND created_at > NOW() - INTERVAL '24 hours'`,
+            [urlData.id, clientIp]
+        );
 
-      await db.query(
-        `INSERT INTO impressions (url_id, user_id, ad_format_id, visitor_ip, visitor_user_agent, earned_amount)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [urlData.id, urlData.user_id, urlData.ad_format_id, clientIp, userAgent, earningAmount]
-      );
+        if (existingView.rows.length === 0) {
+            const earningAmount = parseFloat(urlData.cpm_rate_inr || 0) / 1000;
 
-      // Credit User Wallet
-      await db.query(
-        'UPDATE users SET wallet_balance = wallet_balance + $1, total_earnings = total_earnings + $1 WHERE id = $2',
-        [earningAmount, urlData.user_id]
-      );
+            await db.query(
+                `INSERT INTO impressions (url_id, user_id, ad_format_id, visitor_ip, visitor_user_agent, earned_amount)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [urlData.id, urlData.user_id, urlData.ad_format_id, clientIp, userAgent, earningAmount]
+            );
+
+            await db.query(
+                'UPDATE users SET wallet_balance = wallet_balance + $1, total_earnings = total_earnings + $1 WHERE id = $2',
+                [earningAmount, urlData.user_id]
+            );
+        }
     }
 
-    // Increment Public Click Count
+    // Always increment public click count (even for self-clicks)
     await db.query('UPDATE urls SET click_count = click_count + 1 WHERE id = $1', [urlData.id]);
 
-    // 8. SERVE INTERMEDIATE PAGE
+    // 8. SERVE PAGE
     const safeUrl = urlData.original_url.startsWith('http') ? urlData.original_url : '/';
     
     const htmlContent = `
@@ -145,7 +131,6 @@ exports.redirectUrl = async (req, res) => {
         <title>Security Check | PandaLime</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script>
-            // Anti-Frame Breaker
             if (window.top !== window.self) { window.top.location = window.self.location; }
         </script>
         ${urlData.js_code_snippet}
