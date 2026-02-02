@@ -6,7 +6,14 @@ exports.requestPayout = async (req, res) => {
   try {
     // 1. Check Balance
     const userRes = await db.query('SELECT wallet_balance FROM users WHERE id = $1', [userId]);
-    const balance = parseFloat(userRes.rows[0].wallet_balance);
+    if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+
+    const rawBalance = userRes.rows[0].wallet_balance;
+    const balance = parseFloat(rawBalance);
+    if (isNaN(balance)) {
+      console.error('[Payout] Invalid wallet balance for user', userId, rawBalance);
+      return res.status(500).json({ error: 'Invalid wallet balance' });
+    }
 
     if (balance < 700) {
       return res.status(400).json({ error: 'Minimum withdrawal amount is ₹700' });
@@ -22,8 +29,13 @@ exports.requestPayout = async (req, res) => {
 
     // Lock user's row
     const lockRes = await db.query('SELECT wallet_balance FROM users WHERE id = $1 FOR UPDATE', [userId]);
+    if (lockRes.rows.length === 0) {
+      await db.query('ROLLBACK');
+      return res.status(404).json({ error: 'User not found (locked)' });
+    }
+
     const lockedBalance = parseFloat(lockRes.rows[0].wallet_balance);
-    if (lockedBalance < GROSS) {
+    if (isNaN(lockedBalance) || lockedBalance < GROSS) {
       await db.query('ROLLBACK');
       return res.status(400).json({ error: 'Insufficient balance' });
     }
@@ -33,19 +45,34 @@ exports.requestPayout = async (req, res) => {
     const balanceAfterDeduct = deductRes.rows[0].wallet_balance;
 
     // Create Request storing net amount as `amount` for what user will receive, and record gross/commission
-    const insertReq = await db.query(
-      'INSERT INTO payout_requests (user_id, amount, gross_amount, commission_amount, status) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-      [userId, NET, GROSS, COMMISSION, 'pending']
-    );
+    let payoutId;
+    try {
+      const insertReq = await db.query(
+        'INSERT INTO payout_requests (user_id, amount, gross_amount, commission_amount, status) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+        [userId, NET, GROSS, COMMISSION, 'pending']
+      );
+      payoutId = insertReq.rows[0].id;
+    } catch (err) {
+      // If DB doesn't have the new columns, fall back to older schema and inform
+      if (err.code === '42703') { // undefined_column
+        console.warn('[Payout] payout_requests missing columns gross/commission; falling back. Please run DB migrations.');
+        const insertReq = await db.query('INSERT INTO payout_requests (user_id, amount, status) VALUES ($1, $2, $3) RETURNING id', [userId, NET, 'pending']);
+        payoutId = insertReq.rows[0].id;
+      } else {
+        throw err;
+      }
+    }
 
-    const payoutId = insertReq.rows[0].id;
-
-    // Wallet transaction entry referencing the payout request
-    await db.query(
-      `INSERT INTO wallet_transactions (user_id, change_amount, balance_after, type, reference_id, meta)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [userId, -GROSS, balanceAfterDeduct, 'payout_request', payoutId, JSON.stringify({ gross: GROSS, commission: COMMISSION, net: NET })]
-    );
+    // Wallet transaction entry referencing the payout request (best-effort)
+    try {
+      await db.query(
+        `INSERT INTO wallet_transactions (user_id, change_amount, balance_after, type, reference_id, meta)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [userId, -GROSS, balanceAfterDeduct, 'payout_request', payoutId, JSON.stringify({ gross: GROSS, commission: COMMISSION, net: NET })]
+      );
+    } catch (err) {
+      console.warn('[WalletTx] Could not write wallet transaction; please ensure migrations ran. Continuing. Error:', err.message);
+    }
 
     await db.query('COMMIT');
     res.json({ message: 'Payout requested successfully!', requested: { id: payoutId, gross: GROSS, commission: COMMISSION, net: NET } });
