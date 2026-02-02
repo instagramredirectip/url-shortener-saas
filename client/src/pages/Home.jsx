@@ -66,12 +66,12 @@ const Home = () => {
       
       {/* LIVE PAYOUT TICKER (Psychology Hack: Social Proof) */}
       <div className="bg-green-600 text-white text-xs md:text-sm py-2 overflow-hidden whitespace-nowrap relative z-50">
-        <div className="inline-block animate-marquee px-4">
+        <marquee className="inline-block animate-marquee px-4">
           <span className="mx-4">🔥 <b>Rohan K.</b> just withdrew <b>₹1,200</b> via UPI</span>
           <span className="mx-4">🚀 <b>Priya S.</b> earned <b>₹450</b> from Instagram</span>
           <span className="mx-4">💸 <b>Amit B.</b> received <b>₹3,400</b> via GPay</span>
           <span className="mx-4">🔥 <b>Total Payouts Today:</b> ₹34,500+</span>
-        </div>
+        </marquee>
       </div>
 
       {/* Navigation */}
