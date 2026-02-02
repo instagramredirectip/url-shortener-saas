@@ -1,8 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const { redirectUrl } = require('../controllers/redirectController');
+const { redirectUrl, verifyView } = require('../controllers/redirectController');
 
-// GET /:code (e.g., /abc12)
+// Main Redirect Page
 router.get('/:code', redirectUrl);
+
+// New Verification API (For AdBlock checks & Payouts)
+router.post('/verify-view', verifyView);
 
 module.exports = router;
