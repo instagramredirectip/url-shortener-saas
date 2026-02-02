@@ -1,67 +1,89 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
-const requestIp = require('request-ip'); 
 
-// ... (Your existing generateToken function) ...
+// Helper: Generate Token
 const generateToken = (id) => {
-  if (!process.env.JWT_SECRET) {
-    throw new Error('FATAL ERROR: JWT_SECRET is missing in environment variables!');
-  }
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
 };
 
-// ... (Your existing registerUser function) ...
-const registerUser = async (req, res) => {
-    // ... keep existing code ...
-};
-
-// ... (Your existing loginUser function) ...
-const loginUser = async (req, res) => {
-    // ... keep existing code ...
-};
-
-// ... (Your existing getMe function) ...
-const getMe = async (req, res) => {
+// 1. REGISTER
+exports.registerUser = async (req, res) => {
   try {
-    const user = await db.query('SELECT id, email, role, wallet_balance, upi_id, payment_method FROM users WHERE id = $1', [req.user.id]);
-    res.json(user.rows[0]);
+    const { email, password } = req.body;
+    
+    // Check if user exists
+    const userExists = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    if (userExists.rows.length > 0) return res.status(400).json({ error: 'User already exists' });
+
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Create User
+    const newUser = await db.query(
+      'INSERT INTO users (email, password_hash, role) VALUES ($1, $2, $3) RETURNING id, email, role, wallet_balance',
+      [email, hashedPassword, 'user']
+    );
+
+    const user = newUser.rows[0];
+    res.status(201).json({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      token: generateToken(user.id),
+    });
   } catch (err) {
-    console.error('[GetMe Error]:', err);
+    console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
-// [NEW FUNCTION] UPDATE PAYMENT DETAILS
-const updatePaymentDetails = async (req, res) => {
+// 2. LOGIN
+exports.loginUser = async (req, res) => {
   try {
-    const { upiId, paymentMethod } = req.body;
-    const userId = req.user.id;
+    const { email, password } = req.body;
+    const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+    
+    if (result.rows.length === 0) return res.status(400).json({ error: 'Invalid credentials' });
 
-    if (!upiId) {
-      return res.status(400).json({ error: 'UPI ID is required' });
-    }
-
-    // Update the user's payment info in the database
-    const result = await db.query(
-      'UPDATE users SET upi_id = $1, payment_method = $2 WHERE id = $3 RETURNING id, email, upi_id, payment_method',
-      [upiId, paymentMethod || 'UPI', userId]
-    );
+    const user = result.rows[0];
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    
+    if (!isMatch) return res.status(400).json({ error: 'Invalid credentials' });
 
     res.json({
-      message: 'Payment details updated successfully',
-      user: result.rows[0]
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      token: generateToken(user.id),
     });
-
   } catch (err) {
-    console.error('[Payment Update Error]:', err.message);
-    res.status(500).json({ error: 'Server error updating payment details' });
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
   }
 };
 
-module.exports = {
-  registerUser,
-  loginUser,
-  getMe,
-  updatePaymentDetails // <--- DON'T FORGET TO EXPORT THIS
+// 3. GET ME (Crucial for Dashboard Loading)
+exports.getMe = async (req, res) => {
+  try {
+    const user = await db.query('SELECT id, email, role, wallet_balance, upi_id, payment_method, fraud_score FROM users WHERE id = $1', [req.user.id]);
+    res.json(user.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// 4. UPDATE PAYMENT (For Payouts Page)
+exports.updatePaymentDetails = async (req, res) => {
+  try {
+    const { upiId, paymentMethod } = req.body;
+    await db.query(
+      'UPDATE users SET upi_id = $1, payment_method = $2 WHERE id = $3',
+      [upiId, paymentMethod || 'UPI', req.user.id]
+    );
+    res.json({ message: 'Payment details updated' });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
 };
