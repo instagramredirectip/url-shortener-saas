@@ -10,20 +10,21 @@ import {
 import { 
   Wallet, TrendingUp, Link as LinkIcon, Copy, ExternalLink, 
   Plus, ArrowUpRight, ShieldCheck, Loader2, Zap, Settings, 
-  CheckCircle2, MousePointer2, AlertCircle
+  CheckCircle2, MousePointer2, Type
 } from 'lucide-react';
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const [urls, setUrls] = useState([]); 
   const [adFormats, setAdFormats] = useState([]); 
-  const [selectedFormat, setSelectedFormat] = useState(""); // Default to "" (No Ads)
+  const [selectedFormat, setSelectedFormat] = useState(""); 
   const [loading, setLoading] = useState(true);
   
   // Form State
   const [newUrl, setNewUrl] = useState('');
+  const [customAlias, setCustomAlias] = useState(''); // <--- NEW STATE
   const [creating, setCreating] = useState(false);
-  const [showFormatSelector, setShowFormatSelector] = useState(false); // Toggle for mobile/cleaner UI
+  const [showFormatSelector, setShowFormatSelector] = useState(false);
 
   // Stats
   const [stats, setStats] = useState({ totalClicks: 0, todayEarnings: 0 });
@@ -84,9 +85,9 @@ const Dashboard = () => {
     if (!newUrl) return;
     setCreating(true);
     try {
-      // If selectedFormat is empty string "", send null to backend (No Ads)
       const payload = { 
         originalUrl: newUrl,
+        alias: customAlias, // <--- SEND ALIAS TO BACKEND
         adFormatId: selectedFormat || null 
       };
       
@@ -95,7 +96,8 @@ const Dashboard = () => {
       toast.success('Link Created Successfully!');
       setUrls([data, ...urls]); 
       setNewUrl(''); 
-      setShowFormatSelector(false); // Close selector after creating
+      setCustomAlias(''); // Clear alias input
+      setShowFormatSelector(false); 
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to create link');
     } finally {
@@ -194,7 +196,7 @@ const Dashboard = () => {
             </div>
           </motion.div>
 
-          {/* CREATE LINK CARD (The Modern Interactive Version) */}
+          {/* CREATE LINK CARD */}
           <motion.div 
              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
              className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 rounded-2xl shadow-lg text-white md:col-span-1 col-span-1"
@@ -204,6 +206,7 @@ const Dashboard = () => {
             </h3>
             
             <form onSubmit={handleCreate} className="space-y-4">
+              
               {/* URL Input */}
               <div className="relative">
                 <input 
@@ -218,7 +221,22 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              {/* Interactive Format Selector Toggle */}
+              {/* CUSTOM ALIAS INPUT (Added Back) */}
+              <div className="relative">
+                <input 
+                  type="text" 
+                  placeholder="Custom Alias (Optional, e.g. 'my-cool-link')" 
+                  className="w-full pl-4 pr-10 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-slate-400 focus:outline-none focus:bg-white/20 focus:border-green-500/50 transition-all text-sm"
+                  value={customAlias}
+                  onChange={(e) => setCustomAlias(e.target.value)}
+                  maxLength={20}
+                />
+                <div className="absolute right-3 top-3 text-slate-400 pointer-events-none">
+                  <Type size={16} />
+                </div>
+              </div>
+
+              {/* Format Selector Toggle */}
               <div>
                 <button 
                   type="button"
@@ -236,7 +254,7 @@ const Dashboard = () => {
                     animate={{ height: "auto", opacity: 1 }}
                     className="mt-3 grid grid-cols-1 gap-2 overflow-hidden"
                   >
-                    {/* OPTION 1: Guaranteed No Ads */}
+                    {/* Guaranteed No Ads Option */}
                     <div 
                       onClick={() => setSelectedFormat("")}
                       className={`cursor-pointer p-3 rounded-xl border-2 transition-all flex items-center justify-between group ${
@@ -257,7 +275,7 @@ const Dashboard = () => {
                        {selectedFormat === "" && <CheckCircle2 size={18} className="text-green-500" />}
                     </div>
 
-                    {/* OPTION 2: Dynamic Formats from DB */}
+                    {/* DB Formats */}
                     {adFormats.map((fmt) => (
                       <div 
                         key={fmt.id}
@@ -273,8 +291,8 @@ const Dashboard = () => {
                               <Zap size={16} fill="currentColor" />
                             </div>
                             <div>
-                              <p className="text-sm font-bold text-white">{fmt.name || fmt.display_name}</p>
-                              <p className="text-[10px] text-yellow-200">Earn ₹{fmt.cpm_rate || fmt.cpm_rate_inr}/1k Views</p>
+                              <p className="text-sm font-bold text-white">{fmt.name}</p>
+                              <p className="text-[10px] text-yellow-200">Earn ₹{fmt.cpm_rate}/1k Views</p>
                             </div>
                          </div>
                          {selectedFormat === fmt.id && <CheckCircle2 size={18} className="text-yellow-500" />}
