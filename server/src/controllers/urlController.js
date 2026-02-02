@@ -8,7 +8,13 @@ const generateShortCode = generateCodeModule.generateShortCode || generateCodeMo
 // 1. GET AD FORMATS
 exports.getAdFormats = async (req, res) => {
   try {
-    const result = await db.query('SELECT id, name, cpm_rate FROM ad_formats ORDER BY cpm_rate ASC');
+    const result = await db.query(
+      `SELECT af.id, af.name, af.display_name, ar.cpm_rate_inr as cpm_rate 
+       FROM ad_formats af 
+       LEFT JOIN ad_rates ar ON af.id = ar.ad_format_id 
+       WHERE af.is_active = TRUE 
+       ORDER BY ar.cpm_rate_inr DESC`
+    );
     res.json(result.rows);
   } catch (err) {
     console.error('[AdFormats Error]', err);
@@ -50,10 +56,14 @@ exports.createShortUrl = async (req, res) => {
     let finalFormatId = null;
 
     if (adFormatId) {
-        const fmt = await db.query('SELECT cpm_rate FROM ad_formats WHERE id = $1', [adFormatId]);
+        const fmt = await db.query(
+          `SELECT ar.cpm_rate_inr FROM ad_rates ar 
+           WHERE ar.ad_format_id = $1`, 
+          [adFormatId]
+        );
         if (fmt.rows.length > 0) {
             finalFormatId = adFormatId;
-            if (parseFloat(fmt.rows[0].cpm_rate) > 0) isMonetized = true;
+            if (parseFloat(fmt.rows[0].cpm_rate_inr) > 0) isMonetized = true;
         }
     }
 

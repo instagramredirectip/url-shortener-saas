@@ -67,16 +67,21 @@ exports.loginUser = async (req, res) => {
 // 3. GET ME (Crucial for Dashboard Loading)
 exports.getMe = async (req, res) => {
   try {
-    const user = await db.query('SELECT id, email, role, wallet_balance, upi_id, payment_method, fraud_score FROM users WHERE id = $1', [req.user.id]);
+    const user = await db.query(
+      `SELECT id, email, role, wallet_balance, upi_id, bank_holder_name, bank_account_no, bank_ifsc, total_earnings 
+       FROM users WHERE id = $1`, 
+      [req.user.id]
+    );
     res.json(user.rows[0]);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
 };
-
-// 4. UPDATE PAYMENT (For Payouts Page)
-exports.updatePaymentDetails = async (req, res) => {
-  try {
+bankHolderName, bankAccountNo, bankIfsc } = req.body;
+    await db.query(
+      `UPDATE users SET upi_id = $1, bank_holder_name = $2, bank_account_no = $3, bank_ifsc = $4 
+       WHERE id = $5`,
+      [upiId, bankHolderName, bankAccountNo, bankIfsc
     const { upiId, paymentMethod } = req.body;
     await db.query(
       'UPDATE users SET upi_id = $1, payment_method = $2 WHERE id = $3',
