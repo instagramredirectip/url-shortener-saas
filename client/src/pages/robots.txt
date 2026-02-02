@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+
+# Block sensitive/system folders
+Disallow: /admin/
+Disallow: /payouts/
+Disallow: /login/
+Disallow: /register/
+Disallow: /private/
+Disallow: /tmp/
+Disallow: /config/
+
+# Sitemap (important for SEO)
+Sitemap: https://example.com/sitemap.xml
