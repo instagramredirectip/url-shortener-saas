@@ -241,10 +241,19 @@ exports.verifyView = async (req, res) => {
                 return res.json({ success: true, paid: false, reason: 'Duplicate 24h' });
             }
 
-            // Update Wallet (safe inside same transaction)
-            await db.query(
-                'UPDATE users SET wallet_balance = wallet_balance + $1, total_earnings = total_earnings + $1 WHERE id = $2',
+            // Update Wallet (safe inside same transaction) and record transaction
+            const updateRes = await db.query(
+                'UPDATE users SET wallet_balance = wallet_balance + $1, total_earnings = total_earnings + $1 WHERE id = $2 RETURNING wallet_balance',
                 [decoded.amount, decoded.user_id]
+            );
+
+            const balanceAfter = updateRes.rows[0].wallet_balance;
+
+            // Insert audit record for wallet change
+            await db.query(
+              `INSERT INTO wallet_transactions (user_id, change_amount, balance_after, type, reference_id, meta)
+               VALUES ($1, $2, $3, $4, $5, $6)`,
+              [decoded.user_id, decoded.amount, balanceAfter, 'impression_pay', null, JSON.stringify({ url_id: decoded.url_id, ad_format_id: decoded.ad_format_id })]
             );
 
             await db.query('COMMIT');

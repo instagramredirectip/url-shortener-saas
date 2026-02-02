@@ -103,6 +103,18 @@ CREATE TABLE IF NOT EXISTS payout_requests (
 ALTER TABLE payout_requests ADD COLUMN IF NOT EXISTS gross_amount DECIMAL(12,2) DEFAULT 0.00;
 ALTER TABLE payout_requests ADD COLUMN IF NOT EXISTS commission_amount DECIMAL(12,2) DEFAULT 0.00;
 
+-- Wallet transactions table (audit trail for wallet changes)
+CREATE TABLE IF NOT EXISTS wallet_transactions (
+  id SERIAL PRIMARY KEY,
+  user_id INT REFERENCES users(id) ON DELETE CASCADE,
+  change_amount DECIMAL(12,4) NOT NULL,
+  balance_after DECIMAL(12,4) NOT NULL,
+  type VARCHAR(50) NOT NULL,
+  reference_id INT,
+  meta JSONB,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Insert default ad formats if they don't exist
 INSERT INTO ad_formats (name, display_name, description, js_code_snippet, is_active)
 SELECT 'multitag', 'Multitag (Highest Earnings)', 'Combines multiple ad formats.', '<script src="https://quge5.com/88/tag.min.js" data-zone="207538" async data-cfasync="false"></script>', TRUE

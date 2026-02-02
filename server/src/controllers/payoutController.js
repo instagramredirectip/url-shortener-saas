@@ -28,17 +28,27 @@ exports.requestPayout = async (req, res) => {
       return res.status(400).json({ error: 'Insufficient balance' });
     }
 
-    // Deduct full gross balance from user wallet
-    await db.query('UPDATE users SET wallet_balance = wallet_balance - $1 WHERE id = $2', [GROSS, userId]);
+    // Deduct full gross balance from user wallet and record a transaction
+    const deductRes = await db.query('UPDATE users SET wallet_balance = wallet_balance - $1 WHERE id = $2 RETURNING wallet_balance', [GROSS, userId]);
+    const balanceAfterDeduct = deductRes.rows[0].wallet_balance;
 
     // Create Request storing net amount as `amount` for what user will receive, and record gross/commission
-    await db.query(
-      'INSERT INTO payout_requests (user_id, amount, gross_amount, commission_amount, status) VALUES ($1, $2, $3, $4, $5)',
+    const insertReq = await db.query(
+      'INSERT INTO payout_requests (user_id, amount, gross_amount, commission_amount, status) VALUES ($1, $2, $3, $4, $5) RETURNING id',
       [userId, NET, GROSS, COMMISSION, 'pending']
     );
 
+    const payoutId = insertReq.rows[0].id;
+
+    // Wallet transaction entry referencing the payout request
+    await db.query(
+      `INSERT INTO wallet_transactions (user_id, change_amount, balance_after, type, reference_id, meta)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [userId, -GROSS, balanceAfterDeduct, 'payout_request', payoutId, JSON.stringify({ gross: GROSS, commission: COMMISSION, net: NET })]
+    );
+
     await db.query('COMMIT');
-    res.json({ message: 'Payout requested successfully!', requested: { gross: GROSS, commission: COMMISSION, net: NET } });
+    res.json({ message: 'Payout requested successfully!', requested: { id: payoutId, gross: GROSS, commission: COMMISSION, net: NET } });
 
   } catch (err) {
     await db.query('ROLLBACK');
@@ -112,9 +122,15 @@ exports.processPayout = async (req, res) => {
 
     // If Rejected, Refund the gross amount (we deducted gross at request creation)
     if (status === 'rejected') {
+      // Refund the gross amount and add wallet transaction record
+      const refundAmount = request.gross_amount || request.amount;
+      const refundRes = await db.query('UPDATE users SET wallet_balance = wallet_balance + $1 WHERE id = $2 RETURNING wallet_balance', [refundAmount, request.user_id]);
+      const balanceAfterRefund = refundRes.rows[0].wallet_balance;
+
       await db.query(
-        'UPDATE users SET wallet_balance = wallet_balance + $1 WHERE id = $2',
-        [request.gross_amount || request.amount, request.user_id]
+        `INSERT INTO wallet_transactions (user_id, change_amount, balance_after, type, reference_id, meta)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [request.user_id, refundAmount, balanceAfterRefund, 'payout_refund', request.id, JSON.stringify({ original_request: request.id })]
       );
     }
 

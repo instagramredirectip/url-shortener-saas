@@ -69,6 +69,17 @@ const migrationQuery = `
       processed_by INT REFERENCES users(id),
       admin_note TEXT
   );
+  -- 7. Wallet transactions table (audit trail for all wallet changes)
+  CREATE TABLE IF NOT EXISTS wallet_transactions (
+    id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(id) ON DELETE CASCADE,
+    change_amount DECIMAL(12,4) NOT NULL,
+    balance_after DECIMAL(12,4) NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    reference_id INT,
+    meta JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
 
   -- Add columns to track gross and commission amounts (existing installs)
   ALTER TABLE payout_requests ADD COLUMN IF NOT EXISTS gross_amount DECIMAL(12,2) DEFAULT 0.00;
